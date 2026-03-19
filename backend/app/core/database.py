@@ -1,4 +1,4 @@
-"""Async SQLAlchemy database setup."""
+"""Async SQLAlchemy database setup for Supabase PostgreSQL."""
 
 from typing import AsyncGenerator
 
@@ -14,13 +14,17 @@ class Base(DeclarativeBase):
     pass
 
 
-# Create async engine
+# Create async engine for Supabase PostgreSQL
+# Supabase uses standard PostgreSQL, so we use the same asyncpg driver
+# Connection string format: postgresql+asyncpg://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
 engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
     pool_pre_ping=True,
     pool_size=5,
     max_overflow=10,
+    # Supabase connections may require SSL
+    connect_args={"ssl": "prefer"} if settings.database_url and "supabase" in settings.database_url else {},
 )
 
 # Create async session factory

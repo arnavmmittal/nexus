@@ -25,9 +25,14 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = ""  # Defaults to "Adam" in client if empty
 
-    # Database
-    database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"
-    database_url_sync: str = "postgresql://nexus:nexus@localhost:5432/nexus"
+    # Supabase Configuration
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+
+    # Database (Supabase PostgreSQL)
+    # Format: postgresql+asyncpg://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
+    database_url: str = ""
+    database_url_sync: str = ""
 
     # Redis
     redis_url: str = "redis://localhost:6379"

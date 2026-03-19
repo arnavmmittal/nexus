@@ -15,7 +15,7 @@ FastAPI backend for Nexus - Your Personal AI Life Operating System.
 ### Prerequisites
 
 - Python 3.11+
-- PostgreSQL 15+
+- Supabase account (free tier available)
 - ChromaDB (bundled)
 
 ### Installation
@@ -33,18 +33,37 @@ cp .env.example .env
 # Edit .env with your configuration
 ```
 
-### Database Setup
+### Supabase Setup
+
+1. **Create a Supabase Project**
+   - Go to [supabase.com](https://supabase.com) and sign up/log in
+   - Click "New Project" and fill in the details
+   - Wait for the project to be provisioned (takes ~2 minutes)
+
+2. **Get Your Connection Credentials**
+   - Go to **Settings** > **Database**
+   - Scroll to **Connection string** section
+   - Copy the **URI** connection string
+   - Replace `[YOUR-PASSWORD]` with your database password
+
+3. **Configure Environment Variables**
+   ```bash
+   # In your .env file:
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_ANON_KEY=your-anon-key-from-api-settings
+   DATABASE_URL=postgresql+asyncpg://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
+   DATABASE_URL_SYNC=postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
+   ```
+
+4. **Get Supabase API Keys** (optional, for direct Supabase features)
+   - Go to **Settings** > **API**
+   - Copy the **anon/public** key for `SUPABASE_ANON_KEY`
+   - Copy the **Project URL** for `SUPABASE_URL`
+
+### Database Migrations
 
 ```bash
-# Start PostgreSQL (via Docker or local install)
-docker run -d --name nexus-db \
-  -e POSTGRES_USER=nexus \
-  -e POSTGRES_PASSWORD=nexus \
-  -e POSTGRES_DB=nexus \
-  -p 5432:5432 \
-  postgres:15
-
-# Run migrations
+# Run migrations against Supabase
 alembic upgrade head
 ```
 
@@ -126,14 +145,16 @@ backend/
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ANTHROPIC_API_KEY` | Claude API key | Required |
-| `DATABASE_URL` | PostgreSQL async URL | `postgresql+asyncpg://...` |
-| `DATABASE_URL_SYNC` | PostgreSQL sync URL | `postgresql://...` |
-| `CHROMADB_PATH` | ChromaDB storage path | `./data/chroma` |
-| `CORS_ORIGINS` | Allowed CORS origins | `["http://localhost:3000"]` |
-| `DEBUG` | Enable debug mode | `true` |
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `ANTHROPIC_API_KEY` | Claude API key | Yes |
+| `SUPABASE_URL` | Supabase project URL | Yes |
+| `SUPABASE_ANON_KEY` | Supabase anonymous key | Yes |
+| `DATABASE_URL` | PostgreSQL async URL (Supabase) | Yes |
+| `DATABASE_URL_SYNC` | PostgreSQL sync URL (Supabase) | Yes |
+| `CHROMADB_PATH` | ChromaDB storage path | No (default: `./data/chroma`) |
+| `CORS_ORIGINS` | Allowed CORS origins | No (default: localhost) |
+| `DEBUG` | Enable debug mode | No (default: `true`) |
 
 ## Development
 
@@ -160,7 +181,8 @@ alembic upgrade head
 ## Architecture
 
 - **FastAPI**: Modern async Python web framework
-- **SQLAlchemy 2.0**: Async ORM with PostgreSQL
+- **SQLAlchemy 2.0**: Async ORM with PostgreSQL (Supabase)
+- **Supabase**: Managed PostgreSQL with auth and storage
 - **ChromaDB**: Vector database for semantic search
 - **Anthropic Claude**: AI conversation engine
 - **Pydantic**: Data validation and settings

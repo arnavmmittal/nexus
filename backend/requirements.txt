@@ -9,6 +9,9 @@ sqlalchemy[asyncio]>=2.0.25
 asyncpg>=0.29.0
 alembic>=1.13.1
 
+# Supabase (for direct Supabase features)
+supabase>=2.0.0
+
 # Validation and settings
 pydantic>=2.5.3
 pydantic-settings>=2.1.0

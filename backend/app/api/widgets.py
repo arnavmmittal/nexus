@@ -170,12 +170,12 @@ async def get_health_snapshot(
     Get health data for the widget.
 
     Returns:
-        Health summary (placeholder for Apple Health integration)
+        Health summary (placeholder for health tracking integration)
     """
-    # Placeholder - will integrate with Apple Health
+    # Placeholder - will integrate with health tracking service
     return {
         "status": "not_connected",
-        "message": "Export Apple Health data to see health metrics",
+        "message": "Connect a health tracking service to see health metrics",
         "summary": {
             "steps_today": None,
             "sleep_hours": None,
