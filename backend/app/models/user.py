@@ -1,0 +1,45 @@
+"""User model."""
+
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
+from uuid import UUID
+
+from sqlalchemy import String, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.core.database import Base
+
+if TYPE_CHECKING:
+    from app.models.goal import Achievement, Goal, Streak
+    from app.models.memory import Conversation, Fact, Pattern
+    from app.models.skill import Skill
+
+
+class User(Base):
+    """User model - single user system but structured for future expansion."""
+
+    __tablename__ = "users"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        server_default=func.gen_random_uuid(),
+    )
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    settings: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    # Relationships
+    facts: Mapped[list["Fact"]] = relationship("Fact", back_populates="user")
+    patterns: Mapped[list["Pattern"]] = relationship("Pattern", back_populates="user")
+    skills: Mapped[list["Skill"]] = relationship("Skill", back_populates="user")
+    goals: Mapped[list["Goal"]] = relationship("Goal", back_populates="user")
+    conversations: Mapped[list["Conversation"]] = relationship(
+        "Conversation", back_populates="user"
+    )
+    streaks: Mapped[list["Streak"]] = relationship("Streak", back_populates="user")
+    achievements: Mapped[list["Achievement"]] = relationship(
+        "Achievement", back_populates="user"
+    )
