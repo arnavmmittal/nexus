@@ -1,7 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Heart,
   Moon,
@@ -11,6 +14,7 @@ import {
   Lightbulb,
   Check,
   Minus,
+  Plus,
 } from 'lucide-react';
 
 interface DayData {
@@ -21,23 +25,26 @@ interface DayData {
 }
 
 export function HealthSnapshot() {
-  // Mock data
-  const sleep = {
+  // Local state for manual logging
+  const [sleep, setSleep] = useState({
     hours: 7.2,
     score: 82,
-  };
+  });
 
-  const energy = {
+  const [energy, setEnergy] = useState({
     level: 4, // out of 5
     label: 'High',
-  };
+  });
 
-  const workout = {
+  const [workout, setWorkout] = useState({
     completed: true,
     type: 'Push Day',
-  };
+  });
 
-  const weeklyData: DayData[] = [
+  const [isEditingSleep, setIsEditingSleep] = useState(false);
+  const [sleepInput, setSleepInput] = useState('7.2');
+
+  const [weeklyData, setWeeklyData] = useState<DayData[]>([
     { day: 'M', sleep: 7.5, gym: true, steps: '8k' },
     { day: 'T', sleep: 8.2, gym: false, steps: '12k' },
     { day: 'W', sleep: 6.8, gym: true, steps: '6k' },
@@ -45,7 +52,7 @@ export function HealthSnapshot() {
     { day: 'F', sleep: 0, gym: null, steps: '--' },
     { day: 'S', sleep: 0, gym: null, steps: '--' },
     { day: 'S', sleep: 0, gym: null, steps: '--' },
-  ];
+  ]);
 
   const trend = {
     metric: 'Sleep quality',
@@ -63,32 +70,90 @@ export function HealthSnapshot() {
     return Math.min((hours / 9) * 100, 100);
   };
 
+  const handleSleepUpdate = () => {
+    const hours = parseFloat(sleepInput);
+    if (!isNaN(hours) && hours >= 0 && hours <= 24) {
+      setSleep(prev => ({
+        ...prev,
+        hours,
+        score: Math.min(100, Math.round(hours * 12)), // Simple score calculation
+      }));
+      setIsEditingSleep(false);
+    }
+  };
+
+  const cycleEnergy = () => {
+    const levels = [1, 2, 3, 4, 5];
+    const labels = ['Very Low', 'Low', 'Medium', 'High', 'Peak'];
+    const nextLevel = (energy.level % 5) + 1;
+    setEnergy({
+      level: nextLevel,
+      label: labels[nextLevel - 1],
+    });
+  };
+
+  const toggleWorkout = () => {
+    setWorkout(prev => ({
+      ...prev,
+      completed: !prev.completed,
+    }));
+  };
+
   return (
     <Card className="glass-panel-hover border-orange-500/20 overflow-hidden">
       <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/10">
-            <Heart className="h-4 w-4 text-orange-400" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/10">
+              <Heart className="h-4 w-4 text-orange-400" />
+            </div>
+            <CardTitle className="text-sm font-semibold">HEALTH SNAPSHOT</CardTitle>
           </div>
-          <CardTitle className="text-sm font-semibold">HEALTH SNAPSHOT</CardTitle>
+          <span className="text-xs text-muted-foreground">Manual Logging</span>
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
         {/* Today's Stats */}
         <div className="grid grid-cols-3 gap-3">
-          {/* Sleep */}
-          <div className="p-3 rounded-xl border border-white/5 bg-white/[0.02] text-center">
+          {/* Sleep - Editable */}
+          <div
+            className="p-3 rounded-xl border border-white/5 bg-white/[0.02] text-center cursor-pointer hover:bg-white/[0.04] transition-colors"
+            onClick={() => setIsEditingSleep(true)}
+          >
             <Moon className="h-4 w-4 text-blue-400 mx-auto mb-1" />
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Sleep</p>
-            <p className="stat-number text-xl font-bold">{sleep.hours}h</p>
-            <div className="flex items-center justify-center gap-1 mt-1">
-              <span className="text-yellow-400">★</span>
-              <span className="stat-number text-xs text-muted-foreground">{sleep.score}/100</span>
-            </div>
+            {isEditingSleep ? (
+              <div className="flex items-center justify-center gap-1 mt-1">
+                <Input
+                  type="number"
+                  value={sleepInput}
+                  onChange={(e) => setSleepInput(e.target.value)}
+                  className="w-16 h-7 text-center text-sm p-1"
+                  step="0.1"
+                  min="0"
+                  max="24"
+                  autoFocus
+                  onBlur={handleSleepUpdate}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSleepUpdate()}
+                />
+                <span className="text-xs">h</span>
+              </div>
+            ) : (
+              <>
+                <p className="stat-number text-xl font-bold">{sleep.hours}h</p>
+                <div className="flex items-center justify-center gap-1 mt-1">
+                  <span className="text-yellow-400">★</span>
+                  <span className="stat-number text-xs text-muted-foreground">{sleep.score}/100</span>
+                </div>
+              </>
+            )}
           </div>
 
-          {/* Energy */}
-          <div className="p-3 rounded-xl border border-white/5 bg-white/[0.02] text-center">
+          {/* Energy - Clickable to cycle */}
+          <div
+            className="p-3 rounded-xl border border-white/5 bg-white/[0.02] text-center cursor-pointer hover:bg-white/[0.04] transition-colors"
+            onClick={cycleEnergy}
+          >
             <Zap className="h-4 w-4 text-yellow-400 mx-auto mb-1" />
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Energy</p>
             <div className="flex justify-center gap-0.5 my-1">
@@ -96,7 +161,7 @@ export function HealthSnapshot() {
                 <div
                   key={i}
                   className={cn(
-                    'w-3 h-5 rounded-sm',
+                    'w-3 h-5 rounded-sm transition-colors',
                     i <= energy.level ? 'bg-yellow-400' : 'bg-white/10'
                   )}
                 />
@@ -105,13 +170,30 @@ export function HealthSnapshot() {
             <p className="text-xs font-medium text-yellow-300">{energy.label}</p>
           </div>
 
-          {/* Workout */}
-          <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-center">
-            <Dumbbell className="h-4 w-4 text-emerald-400 mx-auto mb-1" />
+          {/* Workout - Toggle */}
+          <div
+            className={cn(
+              'p-3 rounded-xl border text-center cursor-pointer transition-colors',
+              workout.completed
+                ? 'border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10'
+                : 'border-white/5 bg-white/[0.02] hover:bg-white/[0.04]'
+            )}
+            onClick={toggleWorkout}
+          >
+            <Dumbbell className={cn('h-4 w-4 mx-auto mb-1', workout.completed ? 'text-emerald-400' : 'text-muted-foreground')} />
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Workout</p>
             <div className="flex items-center justify-center gap-1 my-1">
-              <Check className="h-5 w-5 text-emerald-400" />
-              <span className="text-sm font-medium text-emerald-300">Done</span>
+              {workout.completed ? (
+                <>
+                  <Check className="h-5 w-5 text-emerald-400" />
+                  <span className="text-sm font-medium text-emerald-300">Done</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-sm font-medium text-muted-foreground">Log</span>
+                </>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">{workout.type}</p>
           </div>

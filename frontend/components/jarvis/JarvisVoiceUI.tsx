@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { JarvisOrb } from './JarvisOrb';
 import { useVoice, type VoiceState } from './useVoice';
 import { cn } from '@/lib/utils';
-import { Mic, MicOff, Volume2, X, Minimize2, ChevronUp } from 'lucide-react';
+import { Mic, MicOff, Volume2, Minimize2, ChevronUp, Wifi, WifiOff } from 'lucide-react';
 
 interface JarvisVoiceUIProps {
   onMessage?: (transcript: string) => void;
@@ -34,20 +34,23 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
     audioLevel,
     startListening,
     stopListening,
-    speak,
+    speakWithAI,
     isSupported,
-  } = useVoice();
+    isElevenLabsEnabled,
+  } = useVoice({ useElevenLabs: true });
 
   const [isMinimized, setIsMinimized] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [lastResponse, setLastResponse] = useState('');
   const [isHolding, setIsHolding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const holdTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Handle push-to-talk
   const handleMouseDown = useCallback(() => {
     if (!isSupported) return;
     setIsHolding(true);
+    setError(null);
     startListening();
   }, [startListening, isSupported]);
 
@@ -62,29 +65,24 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
     if (state === 'thinking' && transcript) {
       onMessage?.(transcript);
 
-      // Simulate AI response (replace with actual API call)
+      // Process with real AI
       const processMessage = async () => {
-        // Simulated responses
-        const responses = [
-          `Based on your current goals and patterns, I'd suggest focusing on the Nexus project today. You're in a great flow state.`,
-          `I see you have 3 tasks remaining. Your energy levels look optimal for deep work right now.`,
-          `Good timing. You've been on a 24-day coding streak. Let me help you maintain that momentum.`,
-          `Analyzing your schedule... You have a clear 3-hour block coming up. Perfect for focused development.`,
-        ];
+        try {
+          const response = await speakWithAI(transcript);
+          setLastResponse(response);
 
-        const response = responses[Math.floor(Math.random() * responses.length)];
-        setLastResponse(response);
-
-        if (onResponse) {
-          await onResponse(response);
+          if (onResponse) {
+            await onResponse(response);
+          }
+        } catch (err) {
+          console.error('Voice chat error:', err);
+          setError(err instanceof Error ? err.message : 'Failed to process voice chat');
         }
-
-        await speak(response);
       };
 
       processMessage();
     }
-  }, [state, transcript, onMessage, onResponse, speak]);
+  }, [state, transcript, onMessage, onResponse, speakWithAI]);
 
   // Keyboard shortcut (Space to talk)
   useEffect(() => {
@@ -138,7 +136,10 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
       >
         <div className="relative">
           <Volume2 className="w-6 h-6 text-blue-400" />
-          <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
+          <div className={cn(
+            'absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border border-background',
+            isElevenLabsEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-yellow-500'
+          )} />
         </div>
       </button>
     );
@@ -185,6 +186,21 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
           isExpanded ? 'w-full' : 'w-48'
         )}
       >
+        {/* ElevenLabs status indicator */}
+        <div className="flex items-center justify-center gap-1 mb-2 text-xs">
+          {isElevenLabsEnabled ? (
+            <>
+              <Wifi className="w-3 h-3 text-emerald-400" />
+              <span className="text-emerald-400">ElevenLabs</span>
+            </>
+          ) : (
+            <>
+              <WifiOff className="w-3 h-3 text-yellow-400" />
+              <span className="text-yellow-400">Web Speech</span>
+            </>
+          )}
+        </div>
+
         {/* The Orb */}
         <div className="flex justify-center">
           <JarvisOrb
@@ -200,6 +216,13 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
             {stateLabels[state]}
           </p>
         </div>
+
+        {/* Error display */}
+        {error && (
+          <div className="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+            <p className="text-xs text-red-400">{error}</p>
+          </div>
+        )}
 
         {/* Transcript display */}
         {(transcript || interimTranscript) && (

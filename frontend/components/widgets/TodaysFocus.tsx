@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { useTodaysFocus } from '@/hooks/useWidgets';
 import {
   Sun,
   Target,
@@ -14,6 +15,8 @@ import {
   Pause,
   Check,
   RotateCcw,
+  Flame,
+  Loader2,
 } from 'lucide-react';
 
 interface Task {
@@ -24,7 +27,9 @@ interface Task {
 }
 
 export function TodaysFocus() {
-  // Mock data
+  const { data, isLoading, error } = useTodaysFocus();
+
+  // Mock data fallback
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -40,6 +45,20 @@ export function TodaysFocus() {
   const [currentFocus] = useState<string>('Nexus Frontend');
   const [timerSeconds, setTimerSeconds] = useState(2722); // 45:22
   const [isTimerRunning, setIsTimerRunning] = useState(true);
+
+  // Update tasks from API data when available
+  useEffect(() => {
+    if (data?.focus_goals && data.focus_goals.length > 0) {
+      setTasks(
+        data.focus_goals.map((goal, index) => ({
+          id: goal.id,
+          title: goal.title,
+          completed: goal.progress >= 100,
+          progress: goal.progress,
+        }))
+      );
+    }
+  }, [data]);
 
   // Timer effect
   useEffect(() => {
@@ -67,6 +86,27 @@ export function TodaysFocus() {
   const completedCount = tasks.filter((t) => t.completed).length;
   const deepWorkMinutes = Math.floor(timerSeconds / 60);
 
+  // Get active streaks from API data
+  const activeStreaks = data?.active_streaks || [];
+
+  if (error) {
+    return (
+      <Card className="glass-panel-hover border-purple-500/20 overflow-hidden">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/10">
+              <Sun className="h-4 w-4 text-purple-400" />
+            </div>
+            <CardTitle className="text-sm font-semibold">TODAY&apos;S FOCUS</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">Failed to load data. Using local state.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="glass-panel-hover border-purple-500/20 overflow-hidden">
       <CardHeader className="pb-3">
@@ -77,9 +117,12 @@ export function TodaysFocus() {
             </div>
             <CardTitle className="text-sm font-semibold">TODAY&apos;S FOCUS</CardTitle>
           </div>
-          <Badge variant="secondary" className="text-xs text-muted-foreground">
-            {today}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {isLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+            <Badge variant="secondary" className="text-xs text-muted-foreground">
+              {today}
+            </Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -120,13 +163,38 @@ export function TodaysFocus() {
                 {task.progress !== undefined && !task.completed && (
                   <div className="flex items-center gap-2 w-24">
                     <Progress value={task.progress} className="h-1.5" />
-                    <span className="stat-number text-xs text-muted-foreground">{task.progress}%</span>
+                    <span className="stat-number text-xs text-muted-foreground">{Math.round(task.progress)}%</span>
                   </div>
                 )}
               </div>
             ))}
           </div>
         </div>
+
+        {/* Active Streaks */}
+        {activeStreaks.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              <Flame className="h-3 w-3 text-orange-400" />
+              Active Streaks
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {activeStreaks.slice(0, 3).map((streak) => (
+                <Badge
+                  key={streak.activity}
+                  variant="secondary"
+                  className={cn(
+                    'text-xs',
+                    streak.count >= 7 ? 'border-orange-500/30 bg-orange-500/10 text-orange-300' : ''
+                  )}
+                >
+                  {streak.activity}: {streak.count} days
+                  {streak.count >= 7 && <Flame className="h-3 w-3 ml-1 text-orange-400" />}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Current Focus Timer */}
         <div className="space-y-2">

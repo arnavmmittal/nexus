@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { useDashboardStore } from '@/stores/dashboard';
+import { useChatMutation, useStreamingChat } from '@/hooks/useChat';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -18,6 +19,8 @@ import {
   RotateCcw,
   Mic,
   Command,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 
 export function AIChatPanel() {
@@ -34,15 +37,63 @@ export function AIChatPanel() {
   } = useDashboardStore();
 
   const [isExpanded, setIsExpanded] = useState(false);
+  const [useStreaming, setUseStreaming] = useState(true);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Non-streaming chat mutation
+  const { sendMessage: sendNonStreaming, isLoading: isNonStreamingLoading } = useChatMutation();
+
+  // Streaming chat
+  const {
+    connect,
+    sendMessage: sendStreaming,
+    isConnected,
+    isStreaming,
+    currentResponse,
+    conversationId: streamConversationId,
+  } = useStreamingChat({
+    onStreamChunk: () => {
+      // Auto-scroll during streaming
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    },
+    onStreamComplete: (fullResponse) => {
+      addChatMessage({ role: 'assistant', content: fullResponse });
+      setChatLoading(false);
+    },
+    onError: (error) => {
+      console.error('Streaming error:', error);
+      addChatMessage({
+        role: 'assistant',
+        content: `Sorry, I encountered an error: ${error.message}. Please try again.`,
+      });
+      setChatLoading(false);
+    },
+  });
+
+  // Connect to WebSocket when panel opens and streaming is enabled
+  useEffect(() => {
+    if (chatPanelOpen && useStreaming) {
+      connect();
+    }
+  }, [chatPanelOpen, useStreaming, connect]);
+
+  // Update conversation ID from streaming
+  useEffect(() => {
+    if (streamConversationId) {
+      setConversationId(streamConversationId);
+    }
+  }, [streamConversationId]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [chatMessages]);
+  }, [chatMessages, currentResponse]);
 
   // Focus input when panel opens
   useEffect(() => {
@@ -51,30 +102,49 @@ export function AIChatPanel() {
     }
   }, [chatPanelOpen]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim() || isChatLoading) return;
+    if (!chatInput.trim() || isChatLoading || isStreaming) return;
 
     const userMessage = chatInput.trim();
     setChatInput('');
 
     // Add user message
     addChatMessage({ role: 'user', content: userMessage });
-
-    // Simulate AI response
     setChatLoading(true);
-    setTimeout(() => {
-      const responses = [
-        `Based on your current goals and patterns, I'd suggest focusing on your Python practice today. You're on a 23-day streak - let's keep it going!`,
-        `Looking at your schedule, you have a clear 2-hour block this afternoon. That's perfect for deep work on the Nexus project.`,
-        `Your sleep was 7.2 hours last night - that's above your average. You should have good energy for challenging tasks today.`,
-        `I noticed your bench press is at 185 lbs, 82% to your goal. Based on your progress rate, you'll hit 225 lbs by mid-April.`,
-      ];
-      const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-      addChatMessage({ role: 'assistant', content: randomResponse });
-      setChatLoading(false);
-    }, 1000);
-  };
+
+    if (useStreaming && isConnected) {
+      // Use streaming chat
+      sendStreaming(userMessage);
+    } else {
+      // Use non-streaming chat
+      try {
+        const response = await sendNonStreaming(userMessage, conversationId || undefined);
+        addChatMessage({ role: 'assistant', content: response.message });
+        setConversationId(response.conversation_id);
+      } catch (error) {
+        console.error('Chat error:', error);
+        addChatMessage({
+          role: 'assistant',
+          content: 'Sorry, I encountered an error. Please make sure the backend is running at http://localhost:8000',
+        });
+      } finally {
+        setChatLoading(false);
+      }
+    }
+  }, [
+    chatInput,
+    isChatLoading,
+    isStreaming,
+    useStreaming,
+    isConnected,
+    conversationId,
+    setChatInput,
+    addChatMessage,
+    setChatLoading,
+    sendStreaming,
+    sendNonStreaming,
+  ]);
 
   const handleQuickCommand = (command: string) => {
     setChatInput(command);
@@ -104,14 +174,42 @@ export function AIChatPanel() {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/20 to-blue-500/20 border border-emerald-500/30">
               <Command className="h-5 w-5 text-emerald-400" />
             </div>
-            <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-background animate-pulse" />
+            <div className={cn(
+              'absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background',
+              isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-yellow-500'
+            )} />
           </div>
           <div>
             <h2 className="font-semibold text-sm">Nexus AI</h2>
-            <p className="text-xs text-muted-foreground">Your personal assistant</p>
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              {useStreaming ? (
+                isConnected ? (
+                  <>
+                    <Wifi className="h-3 w-3 text-emerald-400" />
+                    <span>Connected (streaming)</span>
+                  </>
+                ) : (
+                  <>
+                    <WifiOff className="h-3 w-3 text-yellow-400" />
+                    <span>Connecting...</span>
+                  </>
+                )
+              ) : (
+                'Standard mode'
+              )}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            onClick={() => setUseStreaming(!useStreaming)}
+            title={useStreaming ? 'Switch to standard mode' : 'Switch to streaming mode'}
+          >
+            {useStreaming ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -124,7 +222,10 @@ export function AIChatPanel() {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={clearChat}
+            onClick={() => {
+              clearChat();
+              setConversationId(null);
+            }}
           >
             <RotateCcw className="h-4 w-4" />
           </Button>
@@ -151,10 +252,10 @@ export function AIChatPanel() {
                 </div>
                 <div className="flex-1 glass-panel rounded-xl p-4">
                   <p className="text-sm leading-relaxed">
-                    Good afternoon, Arnav! I&apos;m Nexus, your personal AI assistant. I have access to all your goals, skills, and patterns.
+                    Good afternoon! I&apos;m Nexus, your personal AI assistant. I have access to all your goals, skills, and patterns.
                   </p>
                   <p className="text-sm text-muted-foreground mt-2">
-                    You have <span className="text-emerald-400 font-medium">3 priorities</span> today. Your energy is high - perfect for tackling the Nexus design docs first.
+                    You have <span className="text-emerald-400 font-medium">3 priorities</span> today. Your energy is high - perfect for tackling focused work.
                   </p>
                   <p className="text-sm text-muted-foreground mt-2">
                     How can I help you today?
@@ -209,7 +310,7 @@ export function AIChatPanel() {
                     : 'bg-blue-500/10 border border-blue-500/20'
                 )}
               >
-                <p className="text-sm leading-relaxed">{message.content}</p>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
                 <p className="text-xs text-muted-foreground mt-1.5">
                   {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
@@ -217,8 +318,24 @@ export function AIChatPanel() {
             </div>
           ))}
 
+          {/* Streaming response */}
+          {isStreaming && currentResponse && (
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
+                <Bot className="h-4 w-4 text-emerald-400" />
+              </div>
+              <div className="flex-1 glass-panel rounded-xl p-3 max-w-[85%]">
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{currentResponse}</p>
+                <div className="flex items-center gap-1 mt-2">
+                  <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-xs text-muted-foreground">Typing...</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Loading indicator */}
-          {isChatLoading && (
+          {(isChatLoading || isNonStreamingLoading) && !isStreaming && (
             <div className="flex items-start gap-3">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
                 <Bot className="h-4 w-4 text-emerald-400" />
@@ -248,7 +365,7 @@ export function AIChatPanel() {
               onChange={(e) => setChatInput(e.target.value)}
               placeholder="Ask Nexus anything..."
               className="pr-10 bg-secondary/50 border-border focus:border-emerald-500/50 focus:ring-emerald-500/20"
-              disabled={isChatLoading}
+              disabled={isChatLoading || isStreaming}
             />
             <Button
               type="button"
@@ -263,7 +380,7 @@ export function AIChatPanel() {
             type="submit"
             size="icon"
             className="bg-emerald-500 hover:bg-emerald-600 text-black h-10 w-10"
-            disabled={!chatInput.trim() || isChatLoading}
+            disabled={!chatInput.trim() || isChatLoading || isStreaming}
           >
             <Send className="h-4 w-4" />
           </Button>

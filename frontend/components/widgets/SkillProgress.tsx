@@ -4,39 +4,53 @@ import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { useSkillsWidget } from '@/hooks/useWidgets';
 import {
   Zap,
   Flame,
   Trophy,
+  Loader2,
 } from 'lucide-react';
 
-interface Skill {
-  name: string;
-  icon: string;
-  xpToday: number;
-  level: number;
-  progressToNext: number;
-}
+// Map skill categories to icons
+const categoryIcons: Record<string, string> = {
+  programming: '\uD83D\uDC0D', // snake for python
+  coding: '\uD83D\uDC0D',
+  python: '\uD83D\uDC0D',
+  design: '\uD83C\uDFA8',
+  ui: '\uD83C\uDFA8',
+  'ui design': '\uD83C\uDFA8',
+  data: '\uD83D\uDCCA',
+  'data analysis': '\uD83D\uDCCA',
+  analytics: '\uD83D\uDCCA',
+  javascript: '\uD83D\uDFE8',
+  typescript: '\uD83D\uDFE6',
+  writing: '\u270D\uFE0F',
+  default: '\u2B50',
+};
 
-interface Streak {
-  name: string;
-  days: number;
-  isHot: boolean;
+function getSkillIcon(category: string): string {
+  const lowerCategory = category.toLowerCase();
+  return categoryIcons[lowerCategory] || categoryIcons.default;
 }
 
 export function SkillProgress() {
-  // Mock data
-  const dailyXP = 385;
-  const dailyGoal = 500;
-  const dailyProgress = (dailyXP / dailyGoal) * 100;
+  const { data, isLoading, error } = useSkillsWidget();
 
-  const skills: Skill[] = [
-    { name: 'Python', icon: '🐍', xpToday: 125, level: 8, progressToNext: 62 },
-    { name: 'UI Design', icon: '🎨', xpToday: 80, level: 4, progressToNext: 45 },
-    { name: 'Data Analysis', icon: '📊', xpToday: 50, level: 3, progressToNext: 78 },
+  // Fallback mock data
+  const mockSkills = [
+    { id: '1', name: 'Python', category: 'programming', level: 8, progress: 62, total_xp: 1250 },
+    { id: '2', name: 'UI Design', category: 'design', level: 4, progress: 45, total_xp: 800 },
+    { id: '3', name: 'Data Analysis', category: 'data', level: 3, progress: 78, total_xp: 500 },
   ];
 
-  const streaks: Streak[] = [
+  const skills = data?.top_skills?.slice(0, 3) || mockSkills;
+  const weeklyXP = data?.weekly_xp || 385;
+  const dailyGoal = 500;
+  const dailyProgress = Math.min((weeklyXP / dailyGoal) * 100, 100);
+
+  // Mock streak data (would come from a different endpoint in real implementation)
+  const streaks = [
     { name: 'Coding', days: 23, isHot: true },
     { name: 'Reading', days: 15, isHot: true },
     { name: 'Gym', days: 8, isHot: false },
@@ -51,53 +65,59 @@ export function SkillProgress() {
   return (
     <Card className="glass-panel-hover border-blue-500/20 overflow-hidden">
       <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10">
-            <Zap className="h-4 w-4 text-blue-400" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10">
+              <Zap className="h-4 w-4 text-blue-400" />
+            </div>
+            <CardTitle className="text-sm font-semibold">SKILL PROGRESS</CardTitle>
           </div>
-          <CardTitle className="text-sm font-semibold">SKILL PROGRESS</CardTitle>
+          {isLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
         {/* Today's XP */}
         <div className="p-4 rounded-xl border border-blue-500/20 bg-blue-500/5">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-muted-foreground uppercase tracking-wide">Today&apos;s XP</span>
-            <span className="stat-number text-2xl font-bold text-blue-300">+{dailyXP}</span>
+            <span className="text-xs text-muted-foreground uppercase tracking-wide">Weekly XP</span>
+            <span className="stat-number text-2xl font-bold text-blue-300">+{weeklyXP}</span>
           </div>
           <div className="space-y-1">
             <Progress value={dailyProgress} className="h-2 bg-blue-950" />
             <p className="text-xs text-muted-foreground text-right stat-number">
-              {dailyXP}/{dailyGoal} daily goal
+              {weeklyXP}/{dailyGoal} weekly goal
             </p>
           </div>
         </div>
 
         {/* Skills Practiced */}
         <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Skills Practiced</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Top Skills</p>
           <div className="space-y-2">
             {skills.map((skill) => (
               <div
-                key={skill.name}
+                key={skill.id}
                 className="flex items-center gap-3 p-2.5 rounded-lg border border-white/5 bg-white/[0.02]"
               >
-                <span className="text-lg">{skill.icon}</span>
+                <span className="text-lg">{getSkillIcon(skill.category)}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-medium">{skill.name}</span>
-                    <span className="text-xs text-blue-400 stat-number">+{skill.xpToday} XP</span>
+                    <span className="text-xs text-blue-400 stat-number">+{skill.total_xp} XP</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Progress value={skill.progressToNext} className="h-1.5 flex-1" />
+                    <Progress value={skill.progress} className="h-1.5 flex-1" />
                     <span className="text-xs text-muted-foreground stat-number">
-                      Lv.{skill.level} → {skill.progressToNext}%
+                      Lv.{skill.level} → {Math.round(skill.progress)}%
                     </span>
                   </div>
                 </div>
               </div>
             ))}
           </div>
+          {error && (
+            <p className="text-xs text-muted-foreground">Using fallback data</p>
+          )}
         </div>
 
         {/* Active Streaks */}

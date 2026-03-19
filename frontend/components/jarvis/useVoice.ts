@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import api from '@/lib/api';
 
 export type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
@@ -34,6 +35,11 @@ declare global {
   }
 }
 
+export interface UseVoiceOptions {
+  useElevenLabs?: boolean;
+  voiceId?: string;
+}
+
 export interface UseVoiceReturn {
   state: VoiceState;
   transcript: string;
@@ -42,16 +48,21 @@ export interface UseVoiceReturn {
   startListening: () => void;
   stopListening: () => void;
   speak: (text: string) => Promise<void>;
+  speakWithAI: (text: string) => Promise<string>;
   getAudioData: () => Float32Array | null;
   isSupported: boolean;
+  isElevenLabsEnabled: boolean;
 }
 
-export function useVoice(): UseVoiceReturn {
+export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
+  const { useElevenLabs = true, voiceId } = options || {};
+
   const [state, setState] = useState<VoiceState>('idle');
   const [transcript, setTranscript] = useState('');
   const [interimTranscript, setInterimTranscript] = useState('');
   const [audioLevel, setAudioLevel] = useState(0);
   const [isSupported, setIsSupported] = useState(true);
+  const [isElevenLabsEnabled, setIsElevenLabsEnabled] = useState(false);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -60,15 +71,26 @@ export function useVoice(): UseVoiceReturn {
   const animationFrameRef = useRef<number | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
 
-  // Check for browser support
+  // Check for browser support and ElevenLabs status
   useEffect(() => {
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognitionAPI) {
       setIsSupported(false);
       console.warn('Speech Recognition API not supported in this browser');
     }
-  }, []);
+
+    // Check ElevenLabs status
+    if (useElevenLabs) {
+      api.getVoiceStatus().then((status) => {
+        setIsElevenLabsEnabled(status.status === 'operational');
+      }).catch(() => {
+        setIsElevenLabsEnabled(false);
+      });
+    }
+  }, [useElevenLabs]);
 
   // Initialize audio context for visualization
   const initAudioContext = useCallback(async () => {
@@ -215,12 +237,75 @@ export function useVoice(): UseVoiceReturn {
     }
   }, [cleanupAudioContext, transcript, interimTranscript]);
 
-  // Speak text using Web Speech API or ElevenLabs
+  // Speak text using ElevenLabs or Web Speech API
   const speak = useCallback(async (text: string): Promise<void> => {
     setState('speaking');
 
+    // Try ElevenLabs first if enabled
+    if (useElevenLabs && isElevenLabsEnabled) {
+      try {
+        const response = await api.synthesizeSpeech({
+          text,
+          voice_id: voiceId,
+        });
+
+        // Play the audio stream
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+
+        return new Promise((resolve) => {
+          const audio = new Audio(audioUrl);
+          audioElementRef.current = audio;
+
+          // Simple speaking animation
+          let speakingAnimationFrame: number;
+          const animateSpeaking = () => {
+            const time = Date.now() / 100;
+            const level = 0.5 + 0.3 * Math.sin(time) + 0.1 * Math.sin(time * 2.5);
+            setAudioLevel(level);
+            speakingAnimationFrame = requestAnimationFrame(animateSpeaking);
+          };
+
+          audio.onplay = () => {
+            animateSpeaking();
+          };
+
+          audio.onended = () => {
+            cancelAnimationFrame(speakingAnimationFrame);
+            setAudioLevel(0);
+            setState('idle');
+            URL.revokeObjectURL(audioUrl);
+            resolve();
+          };
+
+          audio.onerror = () => {
+            cancelAnimationFrame(speakingAnimationFrame);
+            setAudioLevel(0);
+            setState('idle');
+            URL.revokeObjectURL(audioUrl);
+            resolve();
+          };
+
+          audio.play().catch((error) => {
+            console.error('Failed to play audio:', error);
+            // Fall back to Web Speech API
+            fallbackToWebSpeech(text).then(resolve);
+          });
+        });
+      } catch (error) {
+        console.error('ElevenLabs synthesis failed:', error);
+        // Fall back to Web Speech API
+        return fallbackToWebSpeech(text);
+      }
+    }
+
+    // Use Web Speech API
+    return fallbackToWebSpeech(text);
+  }, [useElevenLabs, isElevenLabsEnabled, voiceId]);
+
+  // Fallback to Web Speech API
+  const fallbackToWebSpeech = useCallback((text: string): Promise<void> => {
     return new Promise((resolve) => {
-      // Use Web Speech API for now (can be replaced with ElevenLabs)
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 0.9;
       utterance.pitch = 1.0;
@@ -238,16 +323,9 @@ export function useVoice(): UseVoiceReturn {
         utterance.voice = preferredVoice;
       }
 
-      // Initialize audio context for speaking visualization
-      if (!audioContextRef.current) {
-        audioContextRef.current = new AudioContext();
-      }
-
-      // Create a simple oscillating audio level for speaking animation
-      // In a real implementation, this would be connected to the actual audio output
+      // Simple speaking animation
       let speakingAnimationFrame: number;
       const animateSpeaking = () => {
-        // Simulate audio level with sinusoidal motion
         const time = Date.now() / 100;
         const level = 0.5 + 0.3 * Math.sin(time) + 0.1 * Math.sin(time * 2.5);
         setAudioLevel(level);
@@ -276,6 +354,91 @@ export function useVoice(): UseVoiceReturn {
     });
   }, []);
 
+  // Voice chat with AI - sends text, gets AI response, plays audio
+  const speakWithAI = useCallback(async (text: string): Promise<string> => {
+    setState('thinking');
+
+    try {
+      if (useElevenLabs && isElevenLabsEnabled) {
+        // Use the voice chat endpoint that returns audio
+        const response = await api.voiceChat({
+          text,
+          conversation_id: conversationIdRef.current || undefined,
+          voice_id: voiceId,
+        });
+
+        // Get text response from header
+        const textResponse = response.headers.get('X-Text-Response') || '';
+        const newConversationId = response.headers.get('X-Conversation-Id');
+        if (newConversationId) {
+          conversationIdRef.current = newConversationId;
+        }
+
+        // Play the audio
+        setState('speaking');
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+
+        await new Promise<void>((resolve) => {
+          const audio = new Audio(audioUrl);
+          audioElementRef.current = audio;
+
+          let speakingAnimationFrame: number;
+          const animateSpeaking = () => {
+            const time = Date.now() / 100;
+            const level = 0.5 + 0.3 * Math.sin(time) + 0.1 * Math.sin(time * 2.5);
+            setAudioLevel(level);
+            speakingAnimationFrame = requestAnimationFrame(animateSpeaking);
+          };
+
+          audio.onplay = () => {
+            animateSpeaking();
+          };
+
+          audio.onended = () => {
+            cancelAnimationFrame(speakingAnimationFrame);
+            setAudioLevel(0);
+            setState('idle');
+            URL.revokeObjectURL(audioUrl);
+            resolve();
+          };
+
+          audio.onerror = () => {
+            cancelAnimationFrame(speakingAnimationFrame);
+            setAudioLevel(0);
+            setState('idle');
+            URL.revokeObjectURL(audioUrl);
+            resolve();
+          };
+
+          audio.play().catch((error) => {
+            console.error('Failed to play audio:', error);
+            resolve();
+          });
+        });
+
+        return textResponse;
+      } else {
+        // Get text-only response and use Web Speech API
+        const response = await api.voiceChatText({
+          text,
+          conversation_id: conversationIdRef.current || undefined,
+        });
+
+        conversationIdRef.current = response.conversation_id;
+
+        // Speak the response
+        await speak(response.text_response);
+
+        return response.text_response;
+      }
+    } catch (error) {
+      console.error('Voice chat error:', error);
+      setState('idle');
+      throw error;
+    }
+  }, [useElevenLabs, isElevenLabsEnabled, voiceId, speak]);
+
   // Get current audio frequency data for visualization
   const getAudioData = useCallback((): Float32Array | null => {
     if (analyserRef.current && audioDataRef.current) {
@@ -290,6 +453,9 @@ export function useVoice(): UseVoiceReturn {
     return () => {
       if (recognitionRef.current) {
         recognitionRef.current.abort();
+      }
+      if (audioElementRef.current) {
+        audioElementRef.current.pause();
       }
       cleanupAudioContext();
       if (audioContextRef.current) {
@@ -306,7 +472,9 @@ export function useVoice(): UseVoiceReturn {
     startListening,
     stopListening,
     speak,
+    speakWithAI,
     getAudioData,
     isSupported,
+    isElevenLabsEnabled,
   };
 }
