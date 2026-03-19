@@ -21,7 +21,7 @@ interface Goal {
 
 interface GoalCategory {
   name: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   color: string;
   goals: Goal[];
 }

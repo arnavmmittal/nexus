@@ -23,7 +23,7 @@ interface PortfolioItem {
 
 interface IncomeStream {
   name: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   amount: number;
   percentage: number;
 }
