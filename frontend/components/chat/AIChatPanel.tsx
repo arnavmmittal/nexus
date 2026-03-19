@@ -20,13 +20,6 @@ import {
   Command,
 } from 'lucide-react';
 
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-}
-
 export function AIChatPanel() {
   const {
     chatPanelOpen,

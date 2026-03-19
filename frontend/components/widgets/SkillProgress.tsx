@@ -8,11 +8,6 @@ import {
   Zap,
   Flame,
   Trophy,
-  Code2,
-  Palette,
-  BarChart3,
-  Book,
-  Dumbbell,
 } from 'lucide-react';
 
 interface Skill {

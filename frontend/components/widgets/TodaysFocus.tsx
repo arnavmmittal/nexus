@@ -37,7 +37,7 @@ export function TodaysFocus() {
     { id: '3', title: 'Review investment portfolio', completed: false },
   ]);
 
-  const [currentFocus, setCurrentFocus] = useState<string>('Nexus Frontend');
+  const [currentFocus] = useState<string>('Nexus Frontend');
   const [timerSeconds, setTimerSeconds] = useState(2722); // 45:22
   const [isTimerRunning, setIsTimerRunning] = useState(true);
 

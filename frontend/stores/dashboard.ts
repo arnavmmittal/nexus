@@ -68,7 +68,7 @@ const defaultWidgets: WidgetConfig[] = [
 
 export const useDashboardStore = create<DashboardState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       // Initial state
       widgets: defaultWidgets,
       sidebarOpen: true,
