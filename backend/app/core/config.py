@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     openai_api_key: str = ""
 
+    # Voice / ElevenLabs Configuration
+    elevenlabs_api_key: str = ""
+    elevenlabs_voice_id: str = ""  # Defaults to "Adam" in client if empty
+
     # Database
     database_url: str = "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus"
     database_url_sync: str = "postgresql://nexus:nexus@localhost:5432/nexus"

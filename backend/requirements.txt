@@ -17,6 +17,9 @@ python-dotenv>=1.0.0
 # AI
 anthropic>=0.40.0
 
+# Voice / Text-to-Speech
+elevenlabs>=1.0.0
+
 # Vector database
 chromadb>=0.4.22
 
