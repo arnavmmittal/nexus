@@ -19,6 +19,14 @@ from app.schemas.chat import (
     ChatResponse,
     ChatStreamEvent,
 )
+from app.schemas.cost import (
+    APIUsageRecord,
+    BudgetResponse,
+    CostEstimates,
+    DailyUsageResponse,
+    OperationBreakdown,
+    UsageHistoryResponse,
+)
 
 __all__ = [
     "SkillCreate",
@@ -34,4 +42,10 @@ __all__ = [
     "ChatRequest",
     "ChatResponse",
     "ChatStreamEvent",
+    "APIUsageRecord",
+    "BudgetResponse",
+    "CostEstimates",
+    "DailyUsageResponse",
+    "OperationBreakdown",
+    "UsageHistoryResponse",
 ]

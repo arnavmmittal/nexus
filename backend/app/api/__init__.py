@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api import chat, widgets, skills, goals, memory, integrations
+from app.api import chat, widgets, skills, goals, memory, integrations, costs, health
 from app.voice.router import router as voice_router
 
 # Create main API router
@@ -17,3 +17,5 @@ api_router.include_router(goals.router, prefix="/goals", tags=["goals"])
 api_router.include_router(memory.router, prefix="/memory", tags=["memory"])
 api_router.include_router(voice_router, prefix="/voice", tags=["voice"])
 api_router.include_router(integrations.router, prefix="/integrations", tags=["integrations"])
+api_router.include_router(costs.router, prefix="/costs", tags=["costs"])
+api_router.include_router(health.router, tags=["health"])

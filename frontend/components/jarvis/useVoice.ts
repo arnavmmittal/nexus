@@ -191,6 +191,30 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
     }
   }, [continuous, silenceTimeout, clearSilenceTimeout, state]);
 
+  // Stop current speech (interrupt) - defined early so startListening can use it
+  const stopSpeaking = useCallback(() => {
+    // Stop ElevenLabs audio
+    if (audioElementRef.current) {
+      audioElementRef.current.pause();
+      audioElementRef.current.currentTime = 0;
+      audioElementRef.current = null;
+    }
+
+    // Stop Web Speech API
+    if (typeof speechSynthesis !== 'undefined') {
+      speechSynthesis.cancel();
+    }
+
+    // Cancel any speaking animation
+    if (speakingAnimationFrameRef.current) {
+      cancelAnimationFrame(speakingAnimationFrameRef.current);
+      speakingAnimationFrameRef.current = null;
+    }
+
+    setAudioLevel(0);
+    setState('idle');
+  }, []);
+
   // Start listening for voice input
   const startListening = useCallback(() => {
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -365,30 +389,6 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
     // Use Web Speech API
     return fallbackToWebSpeech(text);
   }, [useElevenLabs, isElevenLabsEnabled, voiceId, playbackSpeed]);
-
-  // Stop current speech (interrupt)
-  const stopSpeaking = useCallback(() => {
-    // Stop ElevenLabs audio
-    if (audioElementRef.current) {
-      audioElementRef.current.pause();
-      audioElementRef.current.currentTime = 0;
-      audioElementRef.current = null;
-    }
-
-    // Stop Web Speech API
-    if (typeof speechSynthesis !== 'undefined') {
-      speechSynthesis.cancel();
-    }
-
-    // Cancel any speaking animation
-    if (speakingAnimationFrameRef.current) {
-      cancelAnimationFrame(speakingAnimationFrameRef.current);
-      speakingAnimationFrameRef.current = null;
-    }
-
-    setAudioLevel(0);
-    setState('idle');
-  }, []);
 
   // Fallback to Web Speech API
   const fallbackToWebSpeech = useCallback((text: string): Promise<void> => {

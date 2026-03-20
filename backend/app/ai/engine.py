@@ -13,6 +13,13 @@ from app.ai.prompts import get_system_prompt
 from app.ai.tools import TOOLS, ToolExecutor
 from app.core.config import settings
 
+# Import agentic tools when available
+try:
+    from app.agent.executor import get_executor, ConfirmationLevel
+    AGENTIC_ENABLED = True
+except ImportError:
+    AGENTIC_ENABLED = False
+
 
 class AIEngine:
     """AI Engine for processing chat messages with Claude and executing tools."""
@@ -21,19 +28,107 @@ class AIEngine:
     MODEL = "claude-3-haiku-20240307"
     MAX_TOKENS = 4096
 
-    def __init__(self, db: AsyncSession, vector_store=None):
+    def __init__(self, db: AsyncSession, vector_store=None, cost_tracker=None):
         """
         Initialize AI Engine.
 
         Args:
             db: Database session
             vector_store: Optional vector store for memory search
+            cost_tracker: Optional cost tracker for budget management
         """
         self.db = db
         self.client = AsyncAnthropic(api_key=settings.anthropic_api_key)
         self.context_assembler = ContextAssembler(db, vector_store)
         self.vector_store = vector_store
+        self.cost_tracker = cost_tracker
         self.conversation_history: Dict[str, List[Dict]] = {}
+        self.pending_plans: Dict[str, Any] = {}  # For agentic confirmation flow
+        self._agentic_executor = None
+
+    async def get_agentic_executor(self, user_id: UUID):
+        """Get the agentic executor for this user."""
+        if not AGENTIC_ENABLED:
+            return None
+        if self._agentic_executor is None:
+            self._agentic_executor = await get_executor(
+                self.db, user_id, self.cost_tracker
+            )
+        return self._agentic_executor
+
+    def _sanitize_tool(self, tool: Dict) -> Dict:
+        """Remove non-standard fields from tool definition for Claude API."""
+        # Claude API only accepts: name, description, input_schema
+        sanitized = {
+            "name": tool.get("name"),
+            "description": tool.get("description"),
+        }
+        if "input_schema" in tool:
+            # Recursively clean input_schema of any non-standard fields
+            sanitized["input_schema"] = self._clean_schema(tool["input_schema"])
+        return sanitized
+
+    def _clean_schema(self, schema: Dict) -> Dict:
+        """Clean a JSON schema of non-standard fields."""
+        if not isinstance(schema, dict):
+            return schema
+
+        # Standard JSON Schema fields
+        allowed_keys = {
+            "type", "properties", "required", "items", "enum", "const",
+            "default", "description", "minimum", "maximum", "minLength",
+            "maxLength", "pattern", "format", "additionalProperties",
+            "oneOf", "anyOf", "allOf", "$ref", "$defs", "definitions"
+        }
+
+        cleaned = {}
+        for key, value in schema.items():
+            if key in allowed_keys:
+                if key == "properties" and isinstance(value, dict):
+                    # Recursively clean each property
+                    cleaned[key] = {
+                        k: self._clean_schema(v) for k, v in value.items()
+                    }
+                elif key == "items" and isinstance(value, dict):
+                    cleaned[key] = self._clean_schema(value)
+                elif key in ("oneOf", "anyOf", "allOf") and isinstance(value, list):
+                    cleaned[key] = [self._clean_schema(item) for item in value]
+                else:
+                    cleaned[key] = value
+        return cleaned
+
+    def get_all_tools(self) -> List[Dict]:
+        """Get all available tools including agentic ones."""
+        all_tools = list(TOOLS)
+
+        # Add agentic tools when available
+        if AGENTIC_ENABLED:
+            try:
+                from app.agent.coder import CODER_TOOLS
+                all_tools.extend(CODER_TOOLS)
+            except ImportError:
+                pass
+
+            try:
+                from app.agent.researcher import RESEARCHER_TOOLS
+                all_tools.extend(RESEARCHER_TOOLS)
+            except ImportError:
+                pass
+
+            try:
+                from app.agent.system_control import SYSTEM_CONTROL_TOOLS
+                all_tools.extend(SYSTEM_CONTROL_TOOLS)
+            except ImportError:
+                pass
+
+            try:
+                from app.agent.finance import FINANCE_TOOLS
+                all_tools.extend(FINANCE_TOOLS)
+            except ImportError:
+                pass
+
+        # Sanitize all tools to remove non-standard fields
+        return [self._sanitize_tool(tool) for tool in all_tools]
 
     async def chat(
         self,
@@ -85,13 +180,14 @@ class AIEngine:
         # Initialize tool executor
         tool_executor = ToolExecutor(self.db, user_id, self.vector_store)
 
-        # Call Claude API with tools
+        # Call Claude API with all available tools
+        all_tools = self.get_all_tools()
         response = await self.client.messages.create(
             model=self.MODEL,
             max_tokens=self.MAX_TOKENS,
             system=system_prompt,
             messages=messages,
-            tools=TOOLS,
+            tools=all_tools,
         )
 
         # Process response - handle tool use loop
@@ -162,12 +258,13 @@ class AIEngine:
                 })
 
                 # Call Claude again with tool results
+                all_tools = self.get_all_tools()
                 response = await self.client.messages.create(
                     model=self.MODEL,
                     max_tokens=self.MAX_TOKENS,
                     system=system_prompt,
                     messages=messages,
-                    tools=TOOLS,
+                    tools=all_tools,
                 )
             else:
                 # No more tool use - extract final text response
@@ -237,12 +334,13 @@ class AIEngine:
         tool_executor = ToolExecutor(self.db, user_id, self.vector_store)
 
         # First, make a non-streaming call to handle any tool use
+        all_tools = self.get_all_tools()
         response = await self.client.messages.create(
             model=self.MODEL,
             max_tokens=self.MAX_TOKENS,
             system=system_prompt,
             messages=messages,
-            tools=TOOLS,
+            tools=all_tools,
         )
 
         # Handle tool use loop (non-streaming)
@@ -283,7 +381,7 @@ class AIEngine:
                 max_tokens=self.MAX_TOKENS,
                 system=system_prompt,
                 messages=messages,
-                tools=TOOLS,
+                tools=all_tools,
             )
 
         # Now stream the final response

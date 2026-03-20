@@ -16,6 +16,8 @@ if TYPE_CHECKING:
     from app.models.goal import Achievement, Goal, Streak
     from app.models.memory import Conversation, Fact, Pattern
     from app.models.skill import Skill
+    from app.models.cost import APIUsage
+    from app.models.conversation import AgentConversation
 
 
 class User(Base):
@@ -44,4 +46,10 @@ class User(Base):
     streaks: Mapped[list["Streak"]] = relationship("Streak", back_populates="user")
     achievements: Mapped[list["Achievement"]] = relationship(
         "Achievement", back_populates="user"
+    )
+    api_usage: Mapped[list["APIUsage"]] = relationship(
+        "APIUsage", back_populates="user"
+    )
+    agent_conversations: Mapped[list["AgentConversation"]] = relationship(
+        "AgentConversation", back_populates="user"
     )

@@ -93,11 +93,36 @@ app.add_middleware(
 )
 
 
-# Health check endpoint
+# Health check endpoints at root level for easy access
+from datetime import datetime
+
+
 @app.get("/health", tags=["health"])
 async def health_check() -> dict:
-    """Health check endpoint."""
-    return {"status": "healthy", "version": "0.1.0"}
+    """Basic health check endpoint."""
+    return {
+        "status": "healthy",
+        "version": "0.1.0",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@app.get("/ready", tags=["health"])
+async def readiness_check() -> dict:
+    """Readiness probe - checks if service can handle requests."""
+    return {
+        "ready": True,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@app.get("/live", tags=["health"])
+async def liveness_check() -> dict:
+    """Liveness probe - checks if service process is running."""
+    return {
+        "alive": True,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
 
 
 # Root endpoint

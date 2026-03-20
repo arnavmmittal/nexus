@@ -8,12 +8,12 @@ import { cn } from '@/lib/utils';
 import { Mic, MicOff, Settings, ArrowLeft, Volume2, VolumeX } from 'lucide-react';
 import Link from 'next/link';
 
-// State colors matching the orb
+// State colors - Orange/amber theme for Jarvis
 const stateColors: Record<VoiceState, { primary: string; secondary: string; hex: number }> = {
-  idle: { primary: '#3b82f6', secondary: '#60a5fa', hex: 0x3b82f6 },
-  listening: { primary: '#06b6d4', secondary: '#22d3ee', hex: 0x06b6d4 },
-  thinking: { primary: '#8b5cf6', secondary: '#a78bfa', hex: 0x8b5cf6 },
-  speaking: { primary: '#10b981', secondary: '#34d399', hex: 0x10b981 },
+  idle: { primary: '#f97316', secondary: '#fb923c', hex: 0xf97316 },      // Orange
+  listening: { primary: '#fbbf24', secondary: '#fcd34d', hex: 0xfbbf24 }, // Amber/Yellow
+  thinking: { primary: '#ea580c', secondary: '#f97316', hex: 0xea580c },  // Deep orange
+  speaking: { primary: '#ff6b35', secondary: '#ff8c5a', hex: 0xff6b35 },  // Coral orange
 };
 
 const stateMessages = {
@@ -31,8 +31,8 @@ const stateMessages = {
   },
 };
 
-// Particle system with thousands of particles
-const PARTICLE_COUNT = 3000;
+// Particle system with many small particles for dotted/stippled effect
+const PARTICLE_COUNT = 8000;
 
 interface ParticleSystemProps {
   state: VoiceState;
@@ -65,7 +65,7 @@ function ParticleSystem({ state, audioLevel }: ParticleSystemProps) {
       velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.02;
       velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.02;
 
-      sizes[i] = Math.random() * 3 + 1;
+      sizes[i] = Math.random() * 1.2 + 0.4;  // Smaller dots for stippled effect
       phases[i] = Math.random() * Math.PI * 2;
     }
 
@@ -556,8 +556,8 @@ export function JarvisFullScreen({ className }: JarvisFullScreenProps) {
 
         {/* Last response */}
         {lastResponse && state === 'idle' && !transcript && (
-          <div className="mb-6 max-w-2xl px-6 py-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 backdrop-blur-xl">
-            <p className="text-center text-lg text-emerald-100">{lastResponse}</p>
+          <div className="mb-6 max-w-2xl px-6 py-4 rounded-2xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-xl">
+            <p className="text-center text-lg text-orange-100">{lastResponse}</p>
           </div>
         )}
 
@@ -566,10 +566,10 @@ export function JarvisFullScreen({ className }: JarvisFullScreenProps) {
           <p
             className={cn(
               'text-xl font-light transition-colors duration-500',
-              state === 'idle' && 'text-blue-400',
-              state === 'listening' && 'text-cyan-400',
-              state === 'thinking' && 'text-purple-400',
-              state === 'speaking' && 'text-emerald-400'
+              state === 'idle' && 'text-orange-400',
+              state === 'listening' && 'text-amber-400',
+              state === 'thinking' && 'text-orange-500',
+              state === 'speaking' && 'text-orange-300'
             )}
           >
             {isMuted ? 'Muted' : stateMessages[voiceMode][state]}
@@ -591,18 +591,18 @@ export function JarvisFullScreen({ className }: JarvisFullScreenProps) {
             'relative w-20 h-20 rounded-full transition-all duration-300',
             'flex items-center justify-center',
             'border-2 select-none',
-            state === 'idle' && !isMuted && 'bg-blue-500/20 border-blue-400/50 hover:bg-blue-500/30 cursor-pointer',
+            state === 'idle' && !isMuted && 'bg-orange-500/20 border-orange-400/50 hover:bg-orange-500/30 cursor-pointer',
             state === 'idle' && isMuted && 'bg-red-500/10 border-red-400/30 cursor-not-allowed',
-            (state === 'listening' || isHolding) && 'bg-cyan-500/30 border-cyan-400 scale-110',
-            state === 'thinking' && 'bg-purple-500/20 border-purple-400/50 animate-pulse cursor-not-allowed',
-            state === 'speaking' && 'bg-emerald-500/20 border-emerald-400/50 hover:bg-red-500/20 hover:border-red-400/50 cursor-pointer'
+            (state === 'listening' || isHolding) && 'bg-amber-500/30 border-amber-400 scale-110',
+            state === 'thinking' && 'bg-orange-600/20 border-orange-500/50 animate-pulse cursor-not-allowed',
+            state === 'speaking' && 'bg-orange-500/20 border-orange-400/50 hover:bg-red-500/20 hover:border-red-400/50 cursor-pointer'
           )}
         >
           {/* Ripple effect when listening */}
           {(state === 'listening' || isHolding) && (
             <>
-              <div className="absolute inset-0 rounded-full border-2 border-cyan-400 animate-ping opacity-30" />
-              <div className="absolute inset-0 rounded-full border border-cyan-400 animate-pulse" />
+              <div className="absolute inset-0 rounded-full border-2 border-amber-400 animate-ping opacity-30" />
+              <div className="absolute inset-0 rounded-full border border-amber-400 animate-pulse" />
             </>
           )}
 
@@ -614,7 +614,7 @@ export function JarvisFullScreen({ className }: JarvisFullScreenProps) {
             <Mic
               className={cn(
                 'w-8 h-8 transition-colors',
-                (state === 'listening' || isHolding) && 'text-cyan-300 animate-pulse'
+                (state === 'listening' || isHolding) && 'text-amber-300 animate-pulse'
               )}
             />
           )}
@@ -624,7 +624,7 @@ export function JarvisFullScreen({ className }: JarvisFullScreenProps) {
         {state === 'listening' && (
           <div className="mt-6 w-48 h-1 rounded-full bg-white/10 overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-cyan-400 to-cyan-300 transition-all duration-75"
+              className="h-full bg-gradient-to-r from-amber-500 to-orange-400 transition-all duration-75"
               style={{ width: `${audioLevel * 100}%` }}
             />
           </div>

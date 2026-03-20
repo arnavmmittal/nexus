@@ -2,6 +2,8 @@
 
 import { cn } from '@/lib/utils';
 import { useDashboardStore } from '@/stores/dashboard';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import {
   LayoutDashboard,
   Target,
@@ -12,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Command,
+  Bot,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -24,6 +27,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/', color: 'text-white' },
+  { icon: Bot, label: 'Jarvis', href: '/jarvis', color: 'text-cyan-400' },
   { icon: Target, label: 'Goals', href: '/goals', color: 'text-purple-400' },
   { icon: Zap, label: 'Skills', href: '/skills', color: 'text-blue-400' },
   { icon: Wallet, label: 'Money', href: '/money', color: 'text-emerald-400' },
@@ -32,6 +36,7 @@ const navItems: NavItem[] = [
 
 export function Sidebar() {
   const { sidebarOpen, toggleSidebar, toggleChatPanel, chatPanelOpen } = useDashboardStore();
+  const pathname = usePathname();
 
   return (
     <aside
@@ -67,10 +72,10 @@ export function Sidebar() {
       <nav className="flex-1 space-y-1 p-3">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = item.href === '/';
+          const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
 
           return (
-            <a
+            <Link
               key={item.href}
               href={item.href}
               title={!sidebarOpen ? item.label : undefined}
@@ -81,13 +86,13 @@ export function Sidebar() {
                 !sidebarOpen && 'justify-center'
               )}
             >
-              <Icon className={cn('h-5 w-5 flex-shrink-0', item.color || 'text-muted-foreground')} />
+              <Icon className={cn('h-5 w-5 flex-shrink-0', isActive ? item.color : 'text-muted-foreground')} />
               {sidebarOpen && (
                 <span className={cn('text-sm font-medium', isActive ? 'text-white' : 'text-muted-foreground')}>
                   {item.label}
                 </span>
               )}
-            </a>
+            </Link>
           );
         })}
       </nav>
@@ -116,18 +121,19 @@ export function Sidebar() {
 
       {/* Settings */}
       <div className="border-t border-border p-3">
-        <a
+        <Link
           href="/settings"
           title={!sidebarOpen ? 'Settings' : undefined}
           className={cn(
             'flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-200',
-            'hover:bg-white/5 text-muted-foreground hover:text-foreground',
+            'hover:bg-white/5',
+            pathname === '/settings' ? 'bg-white/5 border border-white/10 text-white' : 'text-muted-foreground hover:text-foreground',
             !sidebarOpen && 'justify-center'
           )}
         >
           <Settings className="h-5 w-5 flex-shrink-0" />
           {sidebarOpen && <span className="text-sm font-medium">Settings</span>}
-        </a>
+        </Link>
       </div>
     </aside>
   );

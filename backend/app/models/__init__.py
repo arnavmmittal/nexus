@@ -5,6 +5,8 @@ from app.models.memory import Fact, Pattern, Conversation
 from app.models.skill import Skill, SkillXPLog
 from app.models.goal import Goal, GoalProgressLog, Streak, Achievement
 from app.models.plaid import PlaidItem, PlaidAccount, PlaidTransaction
+from app.models.cost import APIUsage
+from app.models.conversation import AgentConversation, ConversationMessage
 
 __all__ = [
     "User",
@@ -20,4 +22,7 @@ __all__ = [
     "PlaidItem",
     "PlaidAccount",
     "PlaidTransaction",
+    "APIUsage",
+    "AgentConversation",
+    "ConversationMessage",
 ]

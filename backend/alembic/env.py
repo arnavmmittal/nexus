@@ -26,6 +26,7 @@ from app.models import (  # noqa: F401
     GoalProgressLog,
     Streak,
     Achievement,
+    APIUsage,
 )
 
 # Alembic Config object
