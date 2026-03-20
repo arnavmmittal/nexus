@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from app.api import api_router
 from app.core.config import settings
 from app.core.database import close_db, init_db
+from app.core.scheduler import start_scheduler, stop_scheduler
 
 # Configure logging
 logging.basicConfig(
@@ -44,12 +45,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as e:
             logger.warning(f"Database initialization skipped: {e}")
 
+    # Start background scheduler
+    try:
+        await start_scheduler()
+        logger.info("Background scheduler started")
+    except Exception as e:
+        logger.warning(f"Background scheduler initialization failed: {e}")
+
     logger.info(f"Server running at http://{settings.host}:{settings.port}")
 
     yield
 
     # Shutdown
     logger.info("Shutting down Nexus backend...")
+    await stop_scheduler()
+    logger.info("Background scheduler stopped")
     await close_db()
     logger.info("Database connections closed")
 

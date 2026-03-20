@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.scheduler import get_scheduled_jobs
 from app.models.memory import Conversation, Fact, Pattern
 from app.memory.vector_store import get_vector_store
 from app.memory.obsidian import get_obsidian_sync
@@ -114,6 +115,58 @@ class ClaudeConversationResponse(BaseModel):
     extracted_skills: dict | None
 
     model_config = {"from_attributes": True}
+
+
+# =============================================================================
+# Obsidian Schemas
+# =============================================================================
+
+
+class ObsidianSyncRequest(BaseModel):
+    """Schema for Obsidian sync request."""
+
+    force: bool = Field(default=False, description="Force full resync ignoring file hashes")
+
+
+class ObsidianSyncResponse(BaseModel):
+    """Schema for Obsidian sync response."""
+
+    status: str
+    synced: int
+    skipped: int
+    unchanged: int
+    deleted: int
+    errors: int
+    chunks_created: int
+    error_message: str | None = None
+
+
+class ObsidianStatusResponse(BaseModel):
+    """Schema for Obsidian status response."""
+
+    configured: bool
+    vault_path: str
+    total_files: int = 0
+    daily_notes: int = 0
+    regular_notes: int = 0
+    total_size_kb: float = 0
+    last_sync: str | None = None
+    indexed_count: int = 0
+    tracked_files: int = 0
+    recent_errors: list[str] = []
+
+
+class ObsidianNoteResult(BaseModel):
+    """Schema for Obsidian note search result."""
+
+    id: str
+    content: str
+    score: float
+    file_path: str
+    file_name: str
+    tags: list[str]
+    note_type: str
+    modified_at: str
 
 
 # Endpoints
@@ -304,6 +357,199 @@ async def list_patterns(
     return result.scalars().all()
 
 
+# =============================================================================
+# Obsidian-Specific Endpoints
+# =============================================================================
+
+
+@router.post("/obsidian/sync", response_model=ObsidianSyncResponse)
+async def sync_obsidian_vault(
+    request: ObsidianSyncRequest | None = None,
+):
+    """
+    Trigger manual sync of Obsidian vault.
+
+    This endpoint indexes all markdown files from the configured Obsidian vault
+    into the vector store for semantic search. Files are chunked for better
+    search results, and only changed files are re-indexed unless force=True.
+
+    Args:
+        request: Sync options (force full resync)
+
+    Returns:
+        Sync statistics
+    """
+    obsidian = get_obsidian_sync()
+
+    if not obsidian.is_configured():
+        return ObsidianSyncResponse(
+            status="error",
+            synced=0,
+            skipped=0,
+            unchanged=0,
+            deleted=0,
+            errors=0,
+            chunks_created=0,
+            error_message="Obsidian vault not configured. Set OBSIDIAN_VAULT_PATH in environment.",
+        )
+
+    force = request.force if request else False
+    stats = await obsidian.sync_vault(str(DEFAULT_USER_ID), force=force)
+
+    if "error" in stats:
+        return ObsidianSyncResponse(
+            status="error",
+            synced=0,
+            skipped=0,
+            unchanged=0,
+            deleted=0,
+            errors=0,
+            chunks_created=0,
+            error_message=stats["error"],
+        )
+
+    return ObsidianSyncResponse(
+        status="success",
+        synced=stats.get("synced", 0),
+        skipped=stats.get("skipped", 0),
+        unchanged=stats.get("unchanged", 0),
+        deleted=stats.get("deleted", 0),
+        errors=stats.get("errors", 0),
+        chunks_created=stats.get("chunks_created", 0),
+    )
+
+
+@router.get("/obsidian/status", response_model=ObsidianStatusResponse)
+async def get_obsidian_status():
+    """
+    Get Obsidian vault sync status.
+
+    Returns information about the vault configuration, file counts,
+    last sync time, and any recent errors.
+
+    Returns:
+        Vault status and statistics
+    """
+    obsidian = get_obsidian_sync()
+    stats = obsidian.get_vault_stats()
+
+    if not stats.get("configured", False):
+        return ObsidianStatusResponse(
+            configured=False,
+            vault_path=stats.get("vault_path", ""),
+        )
+
+    sync_status = stats.get("sync_status", {})
+
+    return ObsidianStatusResponse(
+        configured=True,
+        vault_path=stats.get("vault_path", ""),
+        total_files=stats.get("total_files", 0),
+        daily_notes=stats.get("daily_notes", 0),
+        regular_notes=stats.get("regular_notes", 0),
+        total_size_kb=stats.get("total_size_kb", 0),
+        last_sync=sync_status.get("last_sync"),
+        indexed_count=sync_status.get("indexed_count", 0),
+        tracked_files=sync_status.get("tracked_files", 0),
+        recent_errors=sync_status.get("recent_errors", []),
+    )
+
+
+@router.get("/obsidian/search")
+async def search_obsidian_notes(
+    query: str = Query(..., min_length=1, description="Search query"),
+    limit: int = Query(default=10, ge=1, le=50, description="Maximum results"),
+    tags: str | None = Query(default=None, description="Comma-separated tags to filter by"),
+) -> list[ObsidianNoteResult]:
+    """
+    Search Obsidian notes semantically.
+
+    Searches indexed notes using semantic similarity. Results can be filtered
+    by tags. Returns deduplicated results (one per note file).
+
+    Args:
+        query: Search query text
+        limit: Maximum number of results
+        tags: Optional comma-separated tags to filter by
+
+    Returns:
+        List of matching notes with metadata
+    """
+    obsidian = get_obsidian_sync()
+
+    if not obsidian.is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Obsidian vault not configured",
+        )
+
+    # Parse tags
+    tag_list = None
+    if tags:
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+
+    results = await obsidian.search_notes(
+        query=query,
+        user_id=str(DEFAULT_USER_ID),
+        limit=limit,
+        tags=tag_list,
+    )
+
+    # Transform results
+    formatted_results = []
+    for r in results:
+        metadata = r.get("metadata", {})
+        tags_str = metadata.get("tags", "")
+        tags_list = [t for t in tags_str.split(",") if t] if tags_str else []
+
+        formatted_results.append(
+            ObsidianNoteResult(
+                id=r.get("id", ""),
+                content=r.get("content", "")[:500],  # Truncate content preview
+                score=r.get("score", 0.0),
+                file_path=metadata.get("relative_path", metadata.get("file_path", "")),
+                file_name=metadata.get("file_name", ""),
+                tags=tags_list,
+                note_type=metadata.get("type", "note"),
+                modified_at=metadata.get("modified_at", ""),
+            )
+        )
+
+    return formatted_results
+
+
+@router.get("/obsidian/recent")
+async def get_recent_obsidian_notes(
+    limit: int = Query(default=10, ge=1, le=50, description="Maximum results"),
+) -> list[dict[str, Any]]:
+    """
+    Get recently modified Obsidian notes.
+
+    Returns a list of recently modified notes from the vault,
+    sorted by modification time (newest first).
+
+    Args:
+        limit: Maximum number of results
+
+    Returns:
+        List of recent notes with path, name, and modification time
+    """
+    obsidian = get_obsidian_sync()
+
+    if not obsidian.is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Obsidian vault not configured",
+        )
+
+    return obsidian.get_recent_notes(limit=limit)
+
+
+# =============================================================================
+# General Sync Endpoints
+# =============================================================================
+
+
 @router.post("/sync")
 async def sync_memory(
     source: str = "obsidian",
@@ -320,8 +566,7 @@ async def sync_memory(
         Sync statistics
     """
     if source == "obsidian":
-        vector_store = get_vector_store()
-        obsidian = ObsidianSync(vector_store=vector_store)
+        obsidian = get_obsidian_sync()
         stats = await obsidian.sync_vault(str(DEFAULT_USER_ID))
         return {"source": "obsidian", "stats": stats}
 
@@ -362,10 +607,33 @@ async def get_memory_stats(
     vector_store = get_vector_store()
     vector_stats = vector_store.get_stats()
 
+    # Get Obsidian stats
+    obsidian = get_obsidian_sync()
+    obsidian_stats = obsidian.get_vault_stats()
+
     return {
         "facts_count": facts_count,
         "patterns_count": patterns_count,
         "vector_store": vector_stats,
+        "obsidian": obsidian_stats,
+    }
+
+
+@router.get("/scheduler/status")
+async def get_scheduler_status() -> dict[str, Any]:
+    """
+    Get background scheduler status.
+
+    Returns information about scheduled sync jobs, including
+    next run times and job configuration.
+
+    Returns:
+        Scheduler status and job information
+    """
+    jobs = get_scheduled_jobs()
+    return {
+        "active": len(jobs) > 0,
+        "jobs": jobs,
     }
 
 
