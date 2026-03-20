@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useDashboardStore } from '@/stores/dashboard';
 import { cn } from '@/lib/utils';
 import {
@@ -85,6 +86,12 @@ function SortableWidget({ id, type, size }: SortableWidgetProps) {
 
 export function WidgetGrid() {
   const { widgets, reorderWidgets, sidebarOpen, chatPanelOpen } = useDashboardStore();
+  const [mounted, setMounted] = useState(false);
+
+  // Prevent hydration mismatch - DndContext generates different IDs on server vs client
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -108,6 +115,31 @@ export function WidgetGrid() {
   const visibleWidgets = widgets
     .filter((w) => w.visible)
     .sort((a, b) => a.order - b.order);
+
+  // Show loading state until client-side hydration is complete
+  if (!mounted) {
+    return (
+      <main
+        className={cn(
+          'min-h-screen pt-16 transition-all duration-300',
+          sidebarOpen ? 'pl-56' : 'pl-16',
+          chatPanelOpen ? 'pr-96' : 'pr-0'
+        )}
+      >
+        <div className="p-6 gradient-mesh min-h-[calc(100vh-4rem)]">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 auto-rows-min">
+            {/* Skeleton loading state */}
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div
+                key={i}
+                className="h-64 rounded-xl bg-card/50 animate-pulse border border-border/50"
+              />
+            ))}
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main
