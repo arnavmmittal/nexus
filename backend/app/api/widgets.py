@@ -1,5 +1,6 @@
 """Widget data API endpoints."""
 
+import logging
 from datetime import datetime, timedelta
 from typing import Annotated, Any
 from uuid import UUID
@@ -9,8 +10,14 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.integrations.google_calendar import get_google_calendar_integration
+from app.integrations.plaid import get_plaid_integration
 from app.models.goal import Goal, Streak
+from app.models.plaid import PlaidItem, PlaidAccount
 from app.models.skill import Skill, SkillXPLog
+from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -26,7 +33,7 @@ async def get_todays_focus(
     Get today's focus data for the widget.
 
     Returns:
-        Today's focus information including goals, streaks, and tasks
+        Today's focus information including goals, streaks, calendar events, and tasks
     """
     today = datetime.now().date()
 
@@ -48,6 +55,33 @@ async def get_todays_focus(
     )
     active_streaks = streaks_result.scalars().all()
 
+    # Get today's calendar events (if Google Calendar is connected)
+    calendar_events = []
+    calendar_connected = False
+    try:
+        user_result = await db.execute(select(User).where(User.id == DEFAULT_USER_ID))
+        user = user_result.scalar_one_or_none()
+
+        if user and user.settings and "google_calendar_tokens" in user.settings:
+            calendar_connected = True
+            token_data = user.settings["google_calendar_tokens"]
+            integration = get_google_calendar_integration(token_data)
+            events = await integration.get_todays_events()
+            calendar_events = [
+                {
+                    "id": event.get("id"),
+                    "summary": event.get("summary"),
+                    "start": event.get("start"),
+                    "end": event.get("end"),
+                    "is_all_day": event.get("is_all_day", False),
+                    "location": event.get("location"),
+                }
+                for event in events[:10]  # Limit to 10 events for the widget
+            ]
+    except Exception as e:
+        logger.warning(f"Failed to fetch calendar events: {e}")
+        # Continue without calendar events
+
     return {
         "date": today.isoformat(),
         "focus_goals": [
@@ -67,6 +101,11 @@ async def get_todays_focus(
             }
             for s in active_streaks
         ],
+        "calendar": {
+            "connected": calendar_connected,
+            "events": calendar_events,
+            "count": len(calendar_events),
+        },
         "daily_tasks": [],  # TODO: Integrate with task system
     }
 
@@ -78,19 +117,118 @@ async def get_money_dashboard(
     """
     Get financial data for the money widget.
 
+    Uses Plaid integration to fetch real bank/investment data if connected.
+    Otherwise returns placeholder indicating setup is needed.
+
     Returns:
-        Financial summary (placeholder for Plaid integration)
+        Financial summary including net worth, spending, and recent transactions
     """
-    # Placeholder - will integrate with Plaid
+    plaid = get_plaid_integration()
+
+    # Check if Plaid is connected
+    items_result = await db.execute(
+        select(PlaidItem).where(
+            PlaidItem.user_id == DEFAULT_USER_ID, PlaidItem.status == "active"
+        )
+    )
+    items = items_result.scalars().all()
+
+    if not items:
+        return {
+            "status": "not_connected",
+            "message": "Connect your bank accounts to see financial data",
+            "summary": {
+                "net_worth": None,
+                "monthly_spending": None,
+                "monthly_income": None,
+                "savings_rate": None,
+            },
+            "accounts": [],
+            "recent_transactions": [],
+        }
+
+    # Calculate net worth from cached account balances
+    accounts_result = await db.execute(
+        select(PlaidAccount).where(
+            PlaidAccount.user_id == DEFAULT_USER_ID,
+            PlaidAccount.include_in_net_worth == True,
+        )
+    )
+    accounts = accounts_result.scalars().all()
+
+    total_assets = 0.0
+    total_liabilities = 0.0
+    account_list = []
+
+    for acc in accounts:
+        balance = acc.current_balance or 0.0
+        account_list.append({
+            "id": str(acc.id),
+            "name": acc.custom_name or acc.name,
+            "type": acc.type,
+            "subtype": acc.subtype,
+            "balance": balance,
+            "mask": acc.mask,
+        })
+
+        if acc.type in ["depository", "investment", "brokerage", "other"]:
+            total_assets += balance
+        elif acc.type in ["credit", "loan"]:
+            total_liabilities += balance
+
+    net_worth = total_assets - total_liabilities
+
+    # Fetch recent transactions (last 30 days) for spending analysis
+    monthly_spending = 0.0
+    monthly_income = 0.0
+    recent_transactions = []
+
+    if plaid.is_configured:
+        for item in items:
+            try:
+                result = await plaid.get_transactions(item.access_token, days=30)
+                monthly_spending += result["summary"]["total_spending"]
+                monthly_income += result["summary"]["total_income"]
+
+                # Add recent transactions (limit to first 5 per item for widget)
+                recent_transactions.extend(
+                    [
+                        {
+                            "id": t["id"],
+                            "date": t.get("date"),
+                            "name": t["name"],
+                            "amount": t["amount"],
+                            "category": t.get("category", "Uncategorized"),
+                        }
+                        for t in result["transactions"][:5]
+                    ]
+                )
+            except Exception as e:
+                logger.warning(f"Failed to fetch transactions for widget: {e}")
+
+    # Sort and limit recent transactions
+    recent_transactions.sort(key=lambda x: x.get("date", ""), reverse=True)
+    recent_transactions = recent_transactions[:10]
+
+    # Calculate savings rate
+    savings_rate = None
+    if monthly_income > 0:
+        savings_rate = round((monthly_income - monthly_spending) / monthly_income * 100, 1)
+
     return {
-        "status": "not_connected",
-        "message": "Connect your bank accounts to see financial data",
+        "status": "connected",
+        "institutions": [item.institution_name for item in items if item.institution_name],
         "summary": {
-            "net_worth": None,
-            "monthly_spending": None,
-            "monthly_income": None,
-            "savings_rate": None,
+            "net_worth": round(net_worth, 2),
+            "total_assets": round(total_assets, 2),
+            "total_liabilities": round(total_liabilities, 2),
+            "monthly_spending": round(monthly_spending, 2),
+            "monthly_income": round(monthly_income, 2),
+            "savings_rate": savings_rate,
         },
+        "accounts": account_list[:6],  # Limit to 6 accounts for widget
+        "recent_transactions": recent_transactions,
+        "last_updated": datetime.utcnow().isoformat(),
     }
 
 

@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/api/integrations/google/callback"
 
+    # Plaid Configuration (for banking/investment integration)
+    plaid_client_id: str = ""
+    plaid_secret: str = ""
+    plaid_env: str = "sandbox"  # sandbox, development, or production
+
     # Server Configuration
     host: str = "0.0.0.0"
     port: int = 8000

@@ -670,7 +670,570 @@ async def get_all_integration_statuses(
         )
     )
 
+    # Plaid status
+    plaid_items_result = await db.execute(
+        select(PlaidItem).where(
+            PlaidItem.user_id == DEFAULT_USER_ID, PlaidItem.status == "active"
+        )
+    )
+    plaid_items = plaid_items_result.scalars().all()
+    plaid_connected = len(plaid_items) > 0
+    integrations.append(
+        IntegrationStatus(
+            name="plaid",
+            connected=plaid_connected,
+            last_sync=plaid_items[0].last_accounts_sync if plaid_items else None,
+            error=None,
+        )
+    )
+
     return {
         "integrations": [i.model_dump() for i in integrations],
         "total_connected": sum(1 for i in integrations if i.connected),
     }
+
+
+# ============================================================================
+# Plaid Schemas
+# ============================================================================
+
+
+class PlaidLinkTokenResponse(BaseModel):
+    """Response for link token creation."""
+
+    link_token: str
+    expiration: str
+
+
+class PlaidExchangeRequest(BaseModel):
+    """Request to exchange public token."""
+
+    public_token: str = Field(..., description="The public token from Plaid Link")
+    institution_id: str | None = Field(None, description="Institution ID")
+    institution_name: str | None = Field(None, description="Institution name")
+
+
+class PlaidExchangeResponse(BaseModel):
+    """Response after exchanging public token."""
+
+    item_id: str
+    accounts_count: int
+    institution_name: str | None = None
+
+
+class PlaidAccountResponse(BaseModel):
+    """Account information response."""
+
+    id: str
+    name: str
+    official_name: str | None = None
+    type: str
+    subtype: str | None = None
+    mask: str | None = None
+    current_balance: float | None = None
+    available_balance: float | None = None
+    currency: str = "USD"
+    include_in_net_worth: bool = True
+
+
+class PlaidBalancesResponse(BaseModel):
+    """Balances response with net worth calculation."""
+
+    accounts: list[PlaidAccountResponse]
+    total_assets: float
+    total_liabilities: float
+    net_worth: float
+    last_updated: str
+
+
+class PlaidTransactionResponse(BaseModel):
+    """Transaction response."""
+
+    id: str
+    date: str | None
+    name: str
+    merchant_name: str | None = None
+    amount: float
+    category: str
+    pending: bool = False
+
+
+class PlaidTransactionsResponse(BaseModel):
+    """Transactions list response."""
+
+    transactions: list[PlaidTransactionResponse]
+    total_count: int
+    period: dict[str, Any]
+    summary: dict[str, Any]
+
+
+class PlaidConnectionStatus(BaseModel):
+    """Connection status for Plaid."""
+
+    connected: bool
+    items_count: int
+    accounts_count: int
+    institutions: list[str]
+
+
+# ============================================================================
+# Plaid Endpoints
+# ============================================================================
+
+
+@router.post("/plaid/link-token", response_model=PlaidLinkTokenResponse)
+async def create_plaid_link_token(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    """
+    Create a Plaid Link token.
+
+    This token is used to initialize Plaid Link in the frontend.
+    The Link flow allows users to securely connect their bank accounts.
+    """
+    plaid = get_plaid_integration()
+
+    if not plaid.is_configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Plaid is not configured. Please set PLAID_CLIENT_ID and PLAID_SECRET.",
+        )
+
+    try:
+        result = await plaid.create_link_token(str(DEFAULT_USER_ID))
+        return result
+    except Exception as e:
+        logger.error(f"Failed to create Plaid link token: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create link token: {str(e)}",
+        )
+
+
+@router.post("/plaid/exchange", response_model=PlaidExchangeResponse)
+async def exchange_plaid_public_token(
+    request: PlaidExchangeRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    """
+    Exchange a public token for an access token.
+
+    After a user completes Plaid Link, call this endpoint with the
+    public_token to store the access token and fetch initial accounts.
+    """
+    plaid = get_plaid_integration()
+
+    if not plaid.is_configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Plaid is not configured.",
+        )
+
+    try:
+        # Exchange the token
+        result = await plaid.exchange_public_token(request.public_token)
+
+        # Create PlaidItem record
+        plaid_item = PlaidItem(
+            user_id=DEFAULT_USER_ID,
+            item_id=result["item_id"],
+            access_token=result["access_token"],  # TODO: Encrypt in production
+            institution_id=request.institution_id,
+            institution_name=request.institution_name,
+            status="active",
+        )
+        db.add(plaid_item)
+        await db.flush()
+
+        # Fetch and store accounts
+        accounts = await plaid.get_accounts(result["access_token"])
+        accounts_count = 0
+
+        for acc in accounts:
+            plaid_account = PlaidAccount(
+                item_id=plaid_item.id,
+                user_id=DEFAULT_USER_ID,
+                account_id=acc["id"],
+                name=acc["name"],
+                official_name=acc.get("official_name"),
+                mask=acc.get("mask"),
+                type=str(acc["type"]),
+                subtype=acc.get("subtype"),
+            )
+            db.add(plaid_account)
+            accounts_count += 1
+
+        plaid_item.last_accounts_sync = datetime.utcnow()
+        await db.commit()
+
+        return {
+            "item_id": result["item_id"],
+            "accounts_count": accounts_count,
+            "institution_name": request.institution_name,
+        }
+
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to exchange Plaid token: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to exchange token: {str(e)}",
+        )
+
+
+@router.get("/plaid/status", response_model=PlaidConnectionStatus)
+async def get_plaid_connection_status(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    """
+    Get Plaid connection status.
+
+    Returns information about connected accounts and institutions.
+    """
+    # Get all items for user
+    items_result = await db.execute(
+        select(PlaidItem).where(
+            PlaidItem.user_id == DEFAULT_USER_ID, PlaidItem.status == "active"
+        )
+    )
+    items = items_result.scalars().all()
+
+    # Get all accounts
+    accounts_result = await db.execute(
+        select(PlaidAccount).where(PlaidAccount.user_id == DEFAULT_USER_ID)
+    )
+    accounts = accounts_result.scalars().all()
+
+    return {
+        "connected": len(items) > 0,
+        "items_count": len(items),
+        "accounts_count": len(accounts),
+        "institutions": [item.institution_name for item in items if item.institution_name],
+    }
+
+
+@router.get("/plaid/accounts")
+async def get_plaid_accounts(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[dict[str, Any]]:
+    """
+    Get all connected Plaid accounts.
+
+    Returns a list of all bank and investment accounts.
+    """
+    # Get accounts from database
+    result = await db.execute(
+        select(PlaidAccount).where(PlaidAccount.user_id == DEFAULT_USER_ID)
+    )
+    accounts = result.scalars().all()
+
+    return [
+        {
+            "id": str(acc.id),
+            "account_id": acc.account_id,
+            "name": acc.custom_name or acc.name,
+            "official_name": acc.official_name,
+            "type": acc.type,
+            "subtype": acc.subtype,
+            "mask": acc.mask,
+            "current_balance": acc.current_balance,
+            "available_balance": acc.available_balance,
+            "currency": acc.currency,
+            "include_in_net_worth": acc.include_in_net_worth,
+            "balance_updated_at": (
+                acc.balance_updated_at.isoformat() if acc.balance_updated_at else None
+            ),
+        }
+        for acc in accounts
+    ]
+
+
+@router.get("/plaid/balances", response_model=PlaidBalancesResponse)
+async def get_plaid_balances(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    refresh: bool = Query(False, description="Fetch fresh data from Plaid"),
+) -> dict[str, Any]:
+    """
+    Get account balances and calculate net worth.
+
+    Args:
+        refresh: If True, fetch fresh data from Plaid
+    """
+    plaid = get_plaid_integration()
+
+    # Get all active items
+    items_result = await db.execute(
+        select(PlaidItem).where(
+            PlaidItem.user_id == DEFAULT_USER_ID, PlaidItem.status == "active"
+        )
+    )
+    items = items_result.scalars().all()
+
+    if not items:
+        return {
+            "accounts": [],
+            "total_assets": 0.0,
+            "total_liabilities": 0.0,
+            "net_worth": 0.0,
+            "last_updated": datetime.utcnow().isoformat(),
+        }
+
+    all_accounts = []
+    total_assets = 0.0
+    total_liabilities = 0.0
+
+    for item in items:
+        if refresh and plaid.is_configured:
+            try:
+                # Fetch fresh balances from Plaid
+                balances = await plaid.get_balances(item.access_token)
+
+                # Update cached accounts
+                for acc_data in balances["accounts"]:
+                    acc_result = await db.execute(
+                        select(PlaidAccount).where(
+                            PlaidAccount.account_id == acc_data["id"]
+                        )
+                    )
+                    account = acc_result.scalar_one_or_none()
+                    if account:
+                        account.current_balance = acc_data["current_balance"]
+                        account.available_balance = acc_data["available_balance"]
+                        account.balance_updated_at = datetime.utcnow()
+
+                await db.commit()
+            except Exception as e:
+                logger.warning(f"Failed to refresh Plaid balances: {e}")
+                # Continue with cached data
+
+        # Get accounts from database
+        accounts_result = await db.execute(
+            select(PlaidAccount).where(
+                PlaidAccount.item_id == item.id,
+                PlaidAccount.include_in_net_worth == True,
+            )
+        )
+        accounts = accounts_result.scalars().all()
+
+        for acc in accounts:
+            balance = acc.current_balance or 0.0
+            all_accounts.append(
+                {
+                    "id": str(acc.id),
+                    "name": acc.custom_name or acc.name,
+                    "official_name": acc.official_name,
+                    "type": acc.type,
+                    "subtype": acc.subtype,
+                    "mask": acc.mask,
+                    "current_balance": balance,
+                    "available_balance": acc.available_balance,
+                    "currency": acc.currency,
+                    "include_in_net_worth": acc.include_in_net_worth,
+                }
+            )
+
+            # Calculate totals
+            if acc.type in ["depository", "investment", "brokerage", "other"]:
+                total_assets += balance
+            elif acc.type in ["credit", "loan"]:
+                total_liabilities += balance
+
+    return {
+        "accounts": all_accounts,
+        "total_assets": round(total_assets, 2),
+        "total_liabilities": round(total_liabilities, 2),
+        "net_worth": round(total_assets - total_liabilities, 2),
+        "last_updated": datetime.utcnow().isoformat(),
+    }
+
+
+@router.get("/plaid/transactions", response_model=PlaidTransactionsResponse)
+async def get_plaid_transactions(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    days: int = Query(30, ge=1, le=90, description="Number of days of history"),
+) -> dict[str, Any]:
+    """
+    Get recent transactions.
+
+    Args:
+        days: Number of days of history (default 30, max 90)
+    """
+    plaid = get_plaid_integration()
+
+    # Get all active items
+    items_result = await db.execute(
+        select(PlaidItem).where(
+            PlaidItem.user_id == DEFAULT_USER_ID, PlaidItem.status == "active"
+        )
+    )
+    items = items_result.scalars().all()
+
+    if not items:
+        return {
+            "transactions": [],
+            "total_count": 0,
+            "period": {"start_date": "", "end_date": "", "days": days},
+            "summary": {
+                "total_spending": 0,
+                "total_income": 0,
+                "net": 0,
+                "top_categories": [],
+            },
+        }
+
+    all_transactions = []
+    total_spending = 0.0
+    total_income = 0.0
+    by_category: dict[str, float] = {}
+
+    for item in items:
+        if plaid.is_configured:
+            try:
+                result = await plaid.get_transactions(item.access_token, days)
+                all_transactions.extend(result["transactions"])
+                total_spending += result["summary"]["total_spending"]
+                total_income += result["summary"]["total_income"]
+
+                # Merge categories
+                for cat in result["summary"]["top_categories"]:
+                    by_category[cat["category"]] = (
+                        by_category.get(cat["category"], 0) + cat["amount"]
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to fetch Plaid transactions: {e}")
+                # Continue with other items
+
+    # Sort transactions by date
+    all_transactions.sort(key=lambda x: x.get("date", ""), reverse=True)
+
+    # Get top categories
+    top_categories = sorted(by_category.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=days)
+
+    return {
+        "transactions": [
+            {
+                "id": t["id"],
+                "date": t.get("date"),
+                "name": t["name"],
+                "merchant_name": t.get("merchant_name"),
+                "amount": t["amount"],
+                "category": t.get("category", "Uncategorized"),
+                "pending": t.get("pending", False),
+            }
+            for t in all_transactions[:100]  # Limit to 100 transactions
+        ],
+        "total_count": len(all_transactions),
+        "period": {
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "days": days,
+        },
+        "summary": {
+            "total_spending": round(total_spending, 2),
+            "total_income": round(total_income, 2),
+            "net": round(total_income - total_spending, 2),
+            "top_categories": [
+                {"category": cat, "amount": round(amt, 2)}
+                for cat, amt in top_categories
+            ],
+        },
+    }
+
+
+@router.get("/plaid/investments")
+async def get_plaid_investments(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    """
+    Get investment holdings.
+
+    Returns investment accounts, holdings, and portfolio allocation.
+    """
+    plaid = get_plaid_integration()
+
+    # Get all active items
+    items_result = await db.execute(
+        select(PlaidItem).where(
+            PlaidItem.user_id == DEFAULT_USER_ID, PlaidItem.status == "active"
+        )
+    )
+    items = items_result.scalars().all()
+
+    if not items:
+        return {
+            "accounts": [],
+            "holdings": [],
+            "total_value": 0.0,
+            "allocation": {},
+            "last_updated": datetime.utcnow().isoformat(),
+        }
+
+    all_holdings = []
+    all_accounts = []
+    total_value = 0.0
+    by_type: dict[str, float] = {}
+
+    for item in items:
+        if plaid.is_configured:
+            try:
+                result = await plaid.get_investments(item.access_token)
+
+                if "error" not in result:
+                    all_holdings.extend(result.get("holdings", []))
+                    all_accounts.extend(result.get("accounts", []))
+                    total_value += result.get("total_value", 0)
+
+                    # Merge allocation
+                    for asset_type, data in result.get("allocation", {}).items():
+                        by_type[asset_type] = by_type.get(asset_type, 0) + data["value"]
+            except Exception as e:
+                logger.warning(f"Failed to fetch Plaid investments: {e}")
+
+    # Recalculate percentages
+    allocation = {}
+    for asset_type, value in by_type.items():
+        allocation[asset_type] = {
+            "value": round(value, 2),
+            "percentage": round(value / total_value * 100, 2) if total_value > 0 else 0,
+        }
+
+    return {
+        "accounts": all_accounts,
+        "holdings": all_holdings,
+        "total_value": round(total_value, 2),
+        "allocation": allocation,
+        "last_updated": datetime.utcnow().isoformat(),
+    }
+
+
+@router.delete("/plaid/items/{item_id}")
+async def disconnect_plaid_item(
+    item_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, str]:
+    """
+    Disconnect a Plaid item (bank connection).
+
+    This removes the connection but preserves historical data.
+    """
+    result = await db.execute(
+        select(PlaidItem).where(
+            PlaidItem.item_id == item_id, PlaidItem.user_id == DEFAULT_USER_ID
+        )
+    )
+    item = result.scalar_one_or_none()
+
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Item not found",
+        )
+
+    # Soft delete by marking as disconnected
+    item.status = "disconnected"
+    await db.commit()
+
+    return {"message": "Successfully disconnected"}
