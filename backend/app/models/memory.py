@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import Float, ForeignKey, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.db_types import GUID, JSONType, generate_uuid
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -20,12 +20,12 @@ class Fact(Base):
     __tablename__ = "facts"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         primary_key=True,
-        server_default=func.gen_random_uuid(),
+        default=generate_uuid,
     )
     user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         ForeignKey("users.id"),
         nullable=False,
     )
@@ -51,19 +51,19 @@ class Pattern(Base):
     __tablename__ = "patterns"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         primary_key=True,
-        server_default=func.gen_random_uuid(),
+        default=generate_uuid,
     )
     user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         ForeignKey("users.id"),
         nullable=False,
     )
     domain: Mapped[str] = mapped_column(String(50), nullable=False)
     pattern_type: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
-    evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSONType(), default=dict)
     confidence: Mapped[float] = mapped_column(Float, default=0.5)
     discovered_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
@@ -77,12 +77,12 @@ class Conversation(Base):
     __tablename__ = "conversations"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         primary_key=True,
-        server_default=func.gen_random_uuid(),
+        default=generate_uuid,
     )
     user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         ForeignKey("users.id"),
         nullable=False,
     )
@@ -93,10 +93,10 @@ class Conversation(Base):
     ended_at: Mapped[datetime | None] = mapped_column(nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     extracted_facts: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB, nullable=True
+        JSONType(), nullable=True
     )
     extracted_skills: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB, nullable=True
+        JSONType(), nullable=True
     )
 
     # Relationships

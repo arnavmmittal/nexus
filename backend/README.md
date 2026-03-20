@@ -15,7 +15,6 @@ FastAPI backend for Nexus - Your Personal AI Life Operating System.
 ### Prerequisites
 
 - Python 3.11+
-- Supabase account (free tier available)
 - ChromaDB (bundled)
 
 ### Installation
@@ -30,42 +29,41 @@ pip install -r requirements.txt
 
 # Copy environment file
 cp .env.example .env
-# Edit .env with your configuration
+# Edit .env with your configuration (at minimum, set ANTHROPIC_API_KEY)
 ```
 
-### Supabase Setup
+### Database Setup
 
-1. **Create a Supabase Project**
-   - Go to [supabase.com](https://supabase.com) and sign up/log in
-   - Click "New Project" and fill in the details
-   - Wait for the project to be provisioned (takes ~2 minutes)
+**SQLite (Default - Zero Setup!)**
 
-2. **Get Your Connection Credentials**
-   - Go to **Settings** > **Database**
-   - Scroll to **Connection string** section
-   - Copy the **URI** connection string
-   - Replace `[YOUR-PASSWORD]` with your database password
-
-3. **Configure Environment Variables**
-   ```bash
-   # In your .env file:
-   SUPABASE_URL=https://your-project.supabase.co
-   SUPABASE_ANON_KEY=your-anon-key-from-api-settings
-   DATABASE_URL=postgresql+asyncpg://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
-   DATABASE_URL_SYNC=postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
-   ```
-
-4. **Get Supabase API Keys** (optional, for direct Supabase features)
-   - Go to **Settings** > **API**
-   - Copy the **anon/public** key for `SUPABASE_ANON_KEY`
-   - Copy the **Project URL** for `SUPABASE_URL`
-
-### Database Migrations
+SQLite is the default database - perfect for single-user personal dashboards. No additional setup required! The database file will be created automatically at `./data/nexus.db`.
 
 ```bash
-# Run migrations against Supabase
+# Run migrations
 alembic upgrade head
+
+# That's it! SQLite database is ready.
 ```
+
+**PostgreSQL/Supabase (Optional)**
+
+For production or multi-user deployments, you can use PostgreSQL:
+
+1. Install PostgreSQL dependencies:
+   ```bash
+   pip install asyncpg supabase
+   ```
+
+2. Update your `.env` file:
+   ```bash
+   DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/db
+   DATABASE_URL_SYNC=postgresql://user:pass@host:5432/db
+   ```
+
+3. Run migrations:
+   ```bash
+   alembic upgrade head
+   ```
 
 ### Running the Server
 
@@ -108,6 +106,7 @@ backend/
 │   ├── models/           # SQLAlchemy models
 │   └── schemas/          # Pydantic schemas
 ├── alembic/              # Database migrations
+├── data/                 # SQLite database + ChromaDB storage
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -145,16 +144,21 @@ backend/
 
 ## Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `ANTHROPIC_API_KEY` | Claude API key | Yes |
-| `SUPABASE_URL` | Supabase project URL | Yes |
-| `SUPABASE_ANON_KEY` | Supabase anonymous key | Yes |
-| `DATABASE_URL` | PostgreSQL async URL (Supabase) | Yes |
-| `DATABASE_URL_SYNC` | PostgreSQL sync URL (Supabase) | Yes |
-| `CHROMADB_PATH` | ChromaDB storage path | No (default: `./data/chroma`) |
-| `CORS_ORIGINS` | Allowed CORS origins | No (default: localhost) |
-| `DEBUG` | Enable debug mode | No (default: `true`) |
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `ANTHROPIC_API_KEY` | Claude API key | Yes | - |
+| `DATABASE_URL` | Database connection URL (async) | No | `sqlite+aiosqlite:///./data/nexus.db` |
+| `DATABASE_URL_SYNC` | Database connection URL (sync) | No | `sqlite:///./data/nexus.db` |
+| `CHROMADB_PATH` | ChromaDB storage path | No | `./data/chroma` |
+| `CORS_ORIGINS` | Allowed CORS origins | No | `["http://localhost:3000"]` |
+| `DEBUG` | Enable debug mode | No | `true` |
+
+### Optional PostgreSQL/Supabase Variables
+
+| Variable | Description |
+|----------|-------------|
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_ANON_KEY` | Supabase anonymous key |
 
 ## Development
 
@@ -181,8 +185,9 @@ alembic upgrade head
 ## Architecture
 
 - **FastAPI**: Modern async Python web framework
-- **SQLAlchemy 2.0**: Async ORM with PostgreSQL (Supabase)
-- **Supabase**: Managed PostgreSQL with auth and storage
+- **SQLAlchemy 2.0**: Async ORM with SQLite (default) or PostgreSQL
+- **SQLite**: Zero-config embedded database (default)
+- **PostgreSQL**: Optional for production/multi-user (via Supabase or self-hosted)
 - **ChromaDB**: Vector database for semantic search
 - **Anthropic Claude**: AI conversation engine
 - **Pydantic**: Data validation and settings

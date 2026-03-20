@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import Date, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.db_types import GUID, generate_uuid
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -20,12 +20,12 @@ class Goal(Base):
     __tablename__ = "goals"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         primary_key=True,
-        server_default=func.gen_random_uuid(),
+        default=generate_uuid,
     )
     user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         ForeignKey("users.id"),
         nullable=False,
     )
@@ -67,12 +67,12 @@ class GoalProgressLog(Base):
     __tablename__ = "goal_progress_log"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         primary_key=True,
-        server_default=func.gen_random_uuid(),
+        default=generate_uuid,
     )
     goal_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         ForeignKey("goals.id"),
         nullable=False,
     )
@@ -90,12 +90,12 @@ class Streak(Base):
     __tablename__ = "streaks"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         primary_key=True,
-        server_default=func.gen_random_uuid(),
+        default=generate_uuid,
     )
     user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         ForeignKey("users.id"),
         nullable=False,
     )
@@ -118,12 +118,12 @@ class Achievement(Base):
     )
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         primary_key=True,
-        server_default=func.gen_random_uuid(),
+        default=generate_uuid,
     )
     user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         ForeignKey("users.id"),
         nullable=False,
     )

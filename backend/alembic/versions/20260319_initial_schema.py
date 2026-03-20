@@ -4,12 +4,14 @@ Revision ID: 001
 Revises:
 Create Date: 2026-03-19
 
+This migration is database-agnostic - works with both SQLite and PostgreSQL.
 """
 from typing import Sequence, Union
+import uuid
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
+from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision: str = "001"
@@ -18,250 +20,492 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def upgrade() -> None:
-    # Users table
-    op.create_table(
-        "users",
-        sa.Column(
-            "id",
+def _is_sqlite() -> bool:
+    """Check if current database is SQLite."""
+    return op.get_bind().dialect.name == "sqlite"
+
+
+def _uuid_column(name: str, primary_key: bool = False) -> sa.Column:
+    """Create a UUID column that works with both SQLite and PostgreSQL."""
+    if _is_sqlite():
+        # SQLite: Use String for UUIDs
+        return sa.Column(
+            name,
+            sa.String(36),
+            primary_key=primary_key,
+            nullable=False if primary_key else True,
+        )
+    else:
+        # PostgreSQL: Use native UUID
+        from sqlalchemy.dialects import postgresql
+        return sa.Column(
+            name,
             postgresql.UUID(as_uuid=True),
-            server_default=sa.text("gen_random_uuid()"),
-            nullable=False,
-        ),
-        sa.Column("name", sa.String(255), nullable=True),
-        sa.Column("email", sa.String(255), nullable=True),
-        sa.Column("settings", postgresql.JSONB(), server_default="{}", nullable=False),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.PrimaryKeyConstraint("id"),
-    )
+            server_default=text("gen_random_uuid()"),
+            primary_key=primary_key,
+            nullable=False if primary_key else True,
+        )
+
+
+def _json_column(name: str, default: str = "{}") -> sa.Column:
+    """Create a JSON column that works with both SQLite and PostgreSQL."""
+    if _is_sqlite():
+        # SQLite: Use JSON type
+        return sa.Column(name, sa.JSON(), server_default=default, nullable=False)
+    else:
+        # PostgreSQL: Use JSONB for better performance
+        from sqlalchemy.dialects import postgresql
+        return sa.Column(name, postgresql.JSONB(), server_default=default, nullable=False)
+
+
+def _timestamp_default() -> sa.DefaultClause:
+    """Get timestamp default that works with both SQLite and PostgreSQL."""
+    if _is_sqlite():
+        return sa.func.current_timestamp()
+    else:
+        return text("now()")
+
+
+def upgrade() -> None:
+    is_sqlite = _is_sqlite()
+
+    # Users table
+    if is_sqlite:
+        op.create_table(
+            "users",
+            sa.Column("id", sa.String(36), nullable=False, primary_key=True),
+            sa.Column("name", sa.String(255), nullable=True),
+            sa.Column("email", sa.String(255), nullable=True),
+            sa.Column("settings", sa.JSON(), server_default="{}", nullable=False),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.current_timestamp(),
+                nullable=False,
+            ),
+        )
+    else:
+        from sqlalchemy.dialects import postgresql
+        op.create_table(
+            "users",
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                server_default=text("gen_random_uuid()"),
+                nullable=False,
+            ),
+            sa.Column("name", sa.String(255), nullable=True),
+            sa.Column("email", sa.String(255), nullable=True),
+            sa.Column("settings", postgresql.JSONB(), server_default="{}", nullable=False),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=text("now()"),
+                nullable=False,
+            ),
+            sa.PrimaryKeyConstraint("id"),
+        )
 
     # Facts table
-    op.create_table(
-        "facts",
-        sa.Column(
-            "id",
-            postgresql.UUID(as_uuid=True),
-            server_default=sa.text("gen_random_uuid()"),
-            nullable=False,
-        ),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("category", sa.String(50), nullable=False),
-        sa.Column("key", sa.String(255), nullable=False),
-        sa.Column("value", sa.Text(), nullable=False),
-        sa.Column("confidence", sa.Float(), server_default="1.0", nullable=False),
-        sa.Column("source", sa.String(255), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
-        sa.PrimaryKeyConstraint("id"),
-    )
+    if is_sqlite:
+        op.create_table(
+            "facts",
+            sa.Column("id", sa.String(36), nullable=False, primary_key=True),
+            sa.Column("user_id", sa.String(36), nullable=False),
+            sa.Column("category", sa.String(50), nullable=False),
+            sa.Column("key", sa.String(255), nullable=False),
+            sa.Column("value", sa.Text(), nullable=False),
+            sa.Column("confidence", sa.Float(), server_default="1.0", nullable=False),
+            sa.Column("source", sa.String(255), nullable=True),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.current_timestamp(),
+                nullable=False,
+            ),
+            sa.Column(
+                "updated_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.current_timestamp(),
+                nullable=False,
+            ),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+        )
+    else:
+        from sqlalchemy.dialects import postgresql
+        op.create_table(
+            "facts",
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                server_default=text("gen_random_uuid()"),
+                nullable=False,
+            ),
+            sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column("category", sa.String(50), nullable=False),
+            sa.Column("key", sa.String(255), nullable=False),
+            sa.Column("value", sa.Text(), nullable=False),
+            sa.Column("confidence", sa.Float(), server_default="1.0", nullable=False),
+            sa.Column("source", sa.String(255), nullable=True),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=text("now()"),
+                nullable=False,
+            ),
+            sa.Column(
+                "updated_at",
+                sa.DateTime(timezone=True),
+                server_default=text("now()"),
+                nullable=False,
+            ),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            sa.PrimaryKeyConstraint("id"),
+        )
 
     # Patterns table
-    op.create_table(
-        "patterns",
-        sa.Column(
-            "id",
-            postgresql.UUID(as_uuid=True),
-            server_default=sa.text("gen_random_uuid()"),
-            nullable=False,
-        ),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("domain", sa.String(50), nullable=False),
-        sa.Column("pattern_type", sa.String(100), nullable=False),
-        sa.Column("description", sa.Text(), nullable=False),
-        sa.Column("evidence", postgresql.JSONB(), server_default="{}", nullable=False),
-        sa.Column("confidence", sa.Float(), server_default="0.5", nullable=False),
-        sa.Column(
-            "discovered_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
-        sa.PrimaryKeyConstraint("id"),
-    )
+    if is_sqlite:
+        op.create_table(
+            "patterns",
+            sa.Column("id", sa.String(36), nullable=False, primary_key=True),
+            sa.Column("user_id", sa.String(36), nullable=False),
+            sa.Column("domain", sa.String(50), nullable=False),
+            sa.Column("pattern_type", sa.String(100), nullable=False),
+            sa.Column("description", sa.Text(), nullable=False),
+            sa.Column("evidence", sa.JSON(), server_default="{}", nullable=False),
+            sa.Column("confidence", sa.Float(), server_default="0.5", nullable=False),
+            sa.Column(
+                "discovered_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.current_timestamp(),
+                nullable=False,
+            ),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+        )
+    else:
+        from sqlalchemy.dialects import postgresql
+        op.create_table(
+            "patterns",
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                server_default=text("gen_random_uuid()"),
+                nullable=False,
+            ),
+            sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column("domain", sa.String(50), nullable=False),
+            sa.Column("pattern_type", sa.String(100), nullable=False),
+            sa.Column("description", sa.Text(), nullable=False),
+            sa.Column("evidence", postgresql.JSONB(), server_default="{}", nullable=False),
+            sa.Column("confidence", sa.Float(), server_default="0.5", nullable=False),
+            sa.Column(
+                "discovered_at",
+                sa.DateTime(timezone=True),
+                server_default=text("now()"),
+                nullable=False,
+            ),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            sa.PrimaryKeyConstraint("id"),
+        )
 
     # Skills table
-    op.create_table(
-        "skills",
-        sa.Column(
-            "id",
-            postgresql.UUID(as_uuid=True),
-            server_default=sa.text("gen_random_uuid()"),
-            nullable=False,
-        ),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("name", sa.String(255), nullable=False),
-        sa.Column("category", sa.String(100), nullable=False),
-        sa.Column("current_level", sa.Integer(), server_default="1", nullable=False),
-        sa.Column("current_xp", sa.Integer(), server_default="0", nullable=False),
-        sa.Column("total_xp", sa.Integer(), server_default="0", nullable=False),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column("last_practiced", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("user_id", "name", name="uq_user_skill_name"),
-    )
+    if is_sqlite:
+        op.create_table(
+            "skills",
+            sa.Column("id", sa.String(36), nullable=False, primary_key=True),
+            sa.Column("user_id", sa.String(36), nullable=False),
+            sa.Column("name", sa.String(255), nullable=False),
+            sa.Column("category", sa.String(100), nullable=False),
+            sa.Column("current_level", sa.Integer(), server_default="1", nullable=False),
+            sa.Column("current_xp", sa.Integer(), server_default="0", nullable=False),
+            sa.Column("total_xp", sa.Integer(), server_default="0", nullable=False),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.current_timestamp(),
+                nullable=False,
+            ),
+            sa.Column("last_practiced", sa.DateTime(timezone=True), nullable=True),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            sa.UniqueConstraint("user_id", "name", name="uq_user_skill_name"),
+        )
+    else:
+        from sqlalchemy.dialects import postgresql
+        op.create_table(
+            "skills",
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                server_default=text("gen_random_uuid()"),
+                nullable=False,
+            ),
+            sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column("name", sa.String(255), nullable=False),
+            sa.Column("category", sa.String(100), nullable=False),
+            sa.Column("current_level", sa.Integer(), server_default="1", nullable=False),
+            sa.Column("current_xp", sa.Integer(), server_default="0", nullable=False),
+            sa.Column("total_xp", sa.Integer(), server_default="0", nullable=False),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=text("now()"),
+                nullable=False,
+            ),
+            sa.Column("last_practiced", sa.DateTime(timezone=True), nullable=True),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            sa.PrimaryKeyConstraint("id"),
+            sa.UniqueConstraint("user_id", "name", name="uq_user_skill_name"),
+        )
 
     # Skill XP Log table
-    op.create_table(
-        "skill_xp_log",
-        sa.Column(
-            "id",
-            postgresql.UUID(as_uuid=True),
-            server_default=sa.text("gen_random_uuid()"),
-            nullable=False,
-        ),
-        sa.Column("skill_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("xp_amount", sa.Integer(), nullable=False),
-        sa.Column("source", sa.String(100), nullable=False),
-        sa.Column("description", sa.Text(), nullable=True),
-        sa.Column(
-            "logged_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.ForeignKeyConstraint(["skill_id"], ["skills.id"]),
-        sa.PrimaryKeyConstraint("id"),
-    )
+    if is_sqlite:
+        op.create_table(
+            "skill_xp_log",
+            sa.Column("id", sa.String(36), nullable=False, primary_key=True),
+            sa.Column("skill_id", sa.String(36), nullable=False),
+            sa.Column("xp_amount", sa.Integer(), nullable=False),
+            sa.Column("source", sa.String(100), nullable=False),
+            sa.Column("description", sa.Text(), nullable=True),
+            sa.Column(
+                "logged_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.current_timestamp(),
+                nullable=False,
+            ),
+            sa.ForeignKeyConstraint(["skill_id"], ["skills.id"]),
+        )
+    else:
+        from sqlalchemy.dialects import postgresql
+        op.create_table(
+            "skill_xp_log",
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                server_default=text("gen_random_uuid()"),
+                nullable=False,
+            ),
+            sa.Column("skill_id", postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column("xp_amount", sa.Integer(), nullable=False),
+            sa.Column("source", sa.String(100), nullable=False),
+            sa.Column("description", sa.Text(), nullable=True),
+            sa.Column(
+                "logged_at",
+                sa.DateTime(timezone=True),
+                server_default=text("now()"),
+                nullable=False,
+            ),
+            sa.ForeignKeyConstraint(["skill_id"], ["skills.id"]),
+            sa.PrimaryKeyConstraint("id"),
+        )
 
     # Goals table
-    op.create_table(
-        "goals",
-        sa.Column(
-            "id",
-            postgresql.UUID(as_uuid=True),
-            server_default=sa.text("gen_random_uuid()"),
-            nullable=False,
-        ),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("title", sa.String(255), nullable=False),
-        sa.Column("domain", sa.String(50), nullable=False),
-        sa.Column("target_type", sa.String(50), nullable=False),
-        sa.Column("target_value", sa.Float(), nullable=True),
-        sa.Column("current_value", sa.Float(), server_default="0", nullable=False),
-        sa.Column("unit", sa.String(50), nullable=True),
-        sa.Column("deadline", sa.Date(), nullable=True),
-        sa.Column("status", sa.String(20), server_default="'active'", nullable=False),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
-        sa.PrimaryKeyConstraint("id"),
-    )
+    if is_sqlite:
+        op.create_table(
+            "goals",
+            sa.Column("id", sa.String(36), nullable=False, primary_key=True),
+            sa.Column("user_id", sa.String(36), nullable=False),
+            sa.Column("title", sa.String(255), nullable=False),
+            sa.Column("domain", sa.String(50), nullable=False),
+            sa.Column("target_type", sa.String(50), nullable=False),
+            sa.Column("target_value", sa.Float(), nullable=True),
+            sa.Column("current_value", sa.Float(), server_default="0", nullable=False),
+            sa.Column("unit", sa.String(50), nullable=True),
+            sa.Column("deadline", sa.Date(), nullable=True),
+            sa.Column("status", sa.String(20), server_default="'active'", nullable=False),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.current_timestamp(),
+                nullable=False,
+            ),
+            sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+        )
+    else:
+        from sqlalchemy.dialects import postgresql
+        op.create_table(
+            "goals",
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                server_default=text("gen_random_uuid()"),
+                nullable=False,
+            ),
+            sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column("title", sa.String(255), nullable=False),
+            sa.Column("domain", sa.String(50), nullable=False),
+            sa.Column("target_type", sa.String(50), nullable=False),
+            sa.Column("target_value", sa.Float(), nullable=True),
+            sa.Column("current_value", sa.Float(), server_default="0", nullable=False),
+            sa.Column("unit", sa.String(50), nullable=True),
+            sa.Column("deadline", sa.Date(), nullable=True),
+            sa.Column("status", sa.String(20), server_default="'active'", nullable=False),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=text("now()"),
+                nullable=False,
+            ),
+            sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            sa.PrimaryKeyConstraint("id"),
+        )
 
     # Goal Progress Log table
-    op.create_table(
-        "goal_progress_log",
-        sa.Column(
-            "id",
-            postgresql.UUID(as_uuid=True),
-            server_default=sa.text("gen_random_uuid()"),
-            nullable=False,
-        ),
-        sa.Column("goal_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("previous_value", sa.Float(), nullable=False),
-        sa.Column("new_value", sa.Float(), nullable=False),
-        sa.Column(
-            "logged_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.ForeignKeyConstraint(["goal_id"], ["goals.id"]),
-        sa.PrimaryKeyConstraint("id"),
-    )
+    if is_sqlite:
+        op.create_table(
+            "goal_progress_log",
+            sa.Column("id", sa.String(36), nullable=False, primary_key=True),
+            sa.Column("goal_id", sa.String(36), nullable=False),
+            sa.Column("previous_value", sa.Float(), nullable=False),
+            sa.Column("new_value", sa.Float(), nullable=False),
+            sa.Column(
+                "logged_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.current_timestamp(),
+                nullable=False,
+            ),
+            sa.ForeignKeyConstraint(["goal_id"], ["goals.id"]),
+        )
+    else:
+        from sqlalchemy.dialects import postgresql
+        op.create_table(
+            "goal_progress_log",
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                server_default=text("gen_random_uuid()"),
+                nullable=False,
+            ),
+            sa.Column("goal_id", postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column("previous_value", sa.Float(), nullable=False),
+            sa.Column("new_value", sa.Float(), nullable=False),
+            sa.Column(
+                "logged_at",
+                sa.DateTime(timezone=True),
+                server_default=text("now()"),
+                nullable=False,
+            ),
+            sa.ForeignKeyConstraint(["goal_id"], ["goals.id"]),
+            sa.PrimaryKeyConstraint("id"),
+        )
 
     # Conversations table
-    op.create_table(
-        "conversations",
-        sa.Column(
-            "id",
-            postgresql.UUID(as_uuid=True),
-            server_default=sa.text("gen_random_uuid()"),
-            nullable=False,
-        ),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("source", sa.String(50), nullable=False),
-        sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("ended_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("summary", sa.Text(), nullable=True),
-        sa.Column("extracted_facts", postgresql.JSONB(), nullable=True),
-        sa.Column("extracted_skills", postgresql.JSONB(), nullable=True),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
-        sa.PrimaryKeyConstraint("id"),
-    )
+    if is_sqlite:
+        op.create_table(
+            "conversations",
+            sa.Column("id", sa.String(36), nullable=False, primary_key=True),
+            sa.Column("user_id", sa.String(36), nullable=False),
+            sa.Column("source", sa.String(50), nullable=False),
+            sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("ended_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("summary", sa.Text(), nullable=True),
+            sa.Column("extracted_facts", sa.JSON(), nullable=True),
+            sa.Column("extracted_skills", sa.JSON(), nullable=True),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+        )
+    else:
+        from sqlalchemy.dialects import postgresql
+        op.create_table(
+            "conversations",
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                server_default=text("gen_random_uuid()"),
+                nullable=False,
+            ),
+            sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column("source", sa.String(50), nullable=False),
+            sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("ended_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("summary", sa.Text(), nullable=True),
+            sa.Column("extracted_facts", postgresql.JSONB(), nullable=True),
+            sa.Column("extracted_skills", postgresql.JSONB(), nullable=True),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            sa.PrimaryKeyConstraint("id"),
+        )
 
     # Streaks table
-    op.create_table(
-        "streaks",
-        sa.Column(
-            "id",
-            postgresql.UUID(as_uuid=True),
-            server_default=sa.text("gen_random_uuid()"),
-            nullable=False,
-        ),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("activity", sa.String(255), nullable=False),
-        sa.Column("current_count", sa.Integer(), server_default="0", nullable=False),
-        sa.Column("longest_count", sa.Integer(), server_default="0", nullable=False),
-        sa.Column("last_logged", sa.Date(), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
-        sa.PrimaryKeyConstraint("id"),
-    )
+    if is_sqlite:
+        op.create_table(
+            "streaks",
+            sa.Column("id", sa.String(36), nullable=False, primary_key=True),
+            sa.Column("user_id", sa.String(36), nullable=False),
+            sa.Column("activity", sa.String(255), nullable=False),
+            sa.Column("current_count", sa.Integer(), server_default="0", nullable=False),
+            sa.Column("longest_count", sa.Integer(), server_default="0", nullable=False),
+            sa.Column("last_logged", sa.Date(), nullable=True),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.current_timestamp(),
+                nullable=False,
+            ),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+        )
+    else:
+        from sqlalchemy.dialects import postgresql
+        op.create_table(
+            "streaks",
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                server_default=text("gen_random_uuid()"),
+                nullable=False,
+            ),
+            sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column("activity", sa.String(255), nullable=False),
+            sa.Column("current_count", sa.Integer(), server_default="0", nullable=False),
+            sa.Column("longest_count", sa.Integer(), server_default="0", nullable=False),
+            sa.Column("last_logged", sa.Date(), nullable=True),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=text("now()"),
+                nullable=False,
+            ),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            sa.PrimaryKeyConstraint("id"),
+        )
 
     # Achievements table
-    op.create_table(
-        "achievements",
-        sa.Column(
-            "id",
-            postgresql.UUID(as_uuid=True),
-            server_default=sa.text("gen_random_uuid()"),
-            nullable=False,
-        ),
-        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("achievement_key", sa.String(100), nullable=False),
-        sa.Column(
-            "unlocked_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("user_id", "achievement_key", name="uq_user_achievement"),
-    )
+    if is_sqlite:
+        op.create_table(
+            "achievements",
+            sa.Column("id", sa.String(36), nullable=False, primary_key=True),
+            sa.Column("user_id", sa.String(36), nullable=False),
+            sa.Column("achievement_key", sa.String(100), nullable=False),
+            sa.Column(
+                "unlocked_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.current_timestamp(),
+                nullable=False,
+            ),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            sa.UniqueConstraint("user_id", "achievement_key", name="uq_user_achievement"),
+        )
+    else:
+        from sqlalchemy.dialects import postgresql
+        op.create_table(
+            "achievements",
+            sa.Column(
+                "id",
+                postgresql.UUID(as_uuid=True),
+                server_default=text("gen_random_uuid()"),
+                nullable=False,
+            ),
+            sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column("achievement_key", sa.String(100), nullable=False),
+            sa.Column(
+                "unlocked_at",
+                sa.DateTime(timezone=True),
+                server_default=text("now()"),
+                nullable=False,
+            ),
+            sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+            sa.PrimaryKeyConstraint("id"),
+            sa.UniqueConstraint("user_id", "achievement_key", name="uq_user_achievement"),
+        )
 
     # Create indexes for common queries
     op.create_index("ix_facts_user_id", "facts", ["user_id"])

@@ -1,5 +1,7 @@
-"""Async SQLAlchemy database setup for Supabase PostgreSQL."""
+"""Async SQLAlchemy database setup with SQLite (default) and PostgreSQL support."""
 
+import os
+from pathlib import Path
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -14,17 +16,41 @@ class Base(DeclarativeBase):
     pass
 
 
-# Create async engine for Supabase PostgreSQL
-# Supabase uses standard PostgreSQL, so we use the same asyncpg driver
-# Connection string format: postgresql+asyncpg://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
+def _get_engine_config() -> dict:
+    """Get database engine configuration based on database type."""
+    config = {
+        "echo": settings.debug,
+    }
+
+    if settings.is_sqlite:
+        # SQLite-specific configuration
+        # Ensure data directory exists
+        db_path = settings.database_url.replace("sqlite+aiosqlite:///", "")
+        if db_path.startswith("./"):
+            db_path = db_path[2:]
+        db_dir = Path(db_path).parent
+        if db_dir and str(db_dir) != ".":
+            db_dir.mkdir(parents=True, exist_ok=True)
+
+        # SQLite connection args
+        config["connect_args"] = {"check_same_thread": False}
+    else:
+        # PostgreSQL configuration
+        config["pool_pre_ping"] = True
+        config["pool_size"] = 5
+        config["max_overflow"] = 10
+
+        # Supabase connections may require SSL
+        if settings.database_url and "supabase" in settings.database_url:
+            config["connect_args"] = {"ssl": "prefer"}
+
+    return config
+
+
+# Create async engine (SQLite or PostgreSQL)
 engine = create_async_engine(
     settings.database_url,
-    echo=settings.debug,
-    pool_pre_ping=True,
-    pool_size=5,
-    max_overflow=10,
-    # Supabase connections may require SSL
-    connect_args={"ssl": "prefer"} if settings.database_url and "supabase" in settings.database_url else {},
+    **_get_engine_config(),
 )
 
 # Create async session factory

@@ -6,11 +6,12 @@ python-multipart>=0.0.6
 
 # Database
 sqlalchemy[asyncio]>=2.0.25
-asyncpg>=0.29.0
+aiosqlite>=0.19.0
 alembic>=1.13.1
 
-# Supabase (for direct Supabase features)
-supabase>=2.0.0
+# Optional: PostgreSQL support (uncomment for Supabase/PostgreSQL)
+# asyncpg>=0.29.0
+# supabase>=2.0.0
 
 # Validation and settings
 pydantic>=2.5.3

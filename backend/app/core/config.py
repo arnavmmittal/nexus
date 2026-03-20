@@ -25,14 +25,15 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = ""  # Defaults to "Adam" in client if empty
 
-    # Supabase Configuration
+    # Supabase Configuration (optional - only needed if using Supabase)
     supabase_url: str = ""
     supabase_anon_key: str = ""
 
-    # Database (Supabase PostgreSQL)
-    # Format: postgresql+asyncpg://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
-    database_url: str = ""
-    database_url_sync: str = ""
+    # Database Configuration
+    # Default: SQLite (zero setup, perfect for single-user)
+    # Optional: PostgreSQL/Supabase for production or multi-user
+    database_url: str = "sqlite+aiosqlite:///./data/nexus.db"
+    database_url_sync: str = "sqlite:///./data/nexus.db"
 
     # Redis
     redis_url: str = "redis://localhost:6379"
@@ -64,6 +65,11 @@ class Settings(BaseSettings):
             except json.JSONDecodeError:
                 return [origin.strip() for origin in v.split(",")]
         return v
+
+    @property
+    def is_sqlite(self) -> bool:
+        """Check if using SQLite database."""
+        return self.database_url.startswith("sqlite")
 
     @property
     def chromadb_path_resolved(self) -> Path:

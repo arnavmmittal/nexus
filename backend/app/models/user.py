@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import String, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.db_types import GUID, JSONType, generate_uuid
 
 if TYPE_CHECKING:
     from app.models.goal import Achievement, Goal, Streak
@@ -22,13 +22,13 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         primary_key=True,
-        server_default=func.gen_random_uuid(),
+        default=generate_uuid,
     )
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    settings: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    settings: Mapped[dict[str, Any]] = mapped_column(JSONType(), default=dict)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     # Relationships

@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.db_types import GUID, generate_uuid
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -21,12 +21,12 @@ class Skill(Base):
     __table_args__ = (UniqueConstraint("user_id", "name", name="uq_user_skill_name"),)
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         primary_key=True,
-        server_default=func.gen_random_uuid(),
+        default=generate_uuid,
     )
     user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         ForeignKey("users.id"),
         nullable=False,
     )
@@ -62,12 +62,12 @@ class SkillXPLog(Base):
     __tablename__ = "skill_xp_log"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         primary_key=True,
-        server_default=func.gen_random_uuid(),
+        default=generate_uuid,
     )
     skill_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+        GUID(),
         ForeignKey("skills.id"),
         nullable=False,
     )
