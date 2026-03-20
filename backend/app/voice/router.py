@@ -28,7 +28,19 @@ logger = logging.getLogger(__name__)
 
 # Placeholder user ID (will be replaced with auth later)
 DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
-DEFAULT_USER_NAME = "User"
+DEFAULT_USER_NAME = "Arnav Mittal"
+
+# Voice IDs for different AI personalities
+VOICE_IDS = {
+    "jarvis": "JBFqnCBsd6RMkjVDRZzb",  # George - British, warm
+    "tars": "bIHbv24MWmeRgasZH58o",     # Will - Relaxed, soft American
+}
+
+# Voice settings for different personas (softer for TARS)
+VOICE_SETTINGS = {
+    "jarvis": {"stability": 0.7, "similarity_boost": 0.8, "style": 0.3},
+    "tars": {"stability": 0.4, "similarity_boost": 0.6, "style": 0.1},  # Softer, less enunciated
+}
 
 
 # Request/Response schemas
@@ -50,6 +62,8 @@ class VoiceChatRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=10000, description="User message text")
     conversation_id: Optional[str] = Field(None, description="Conversation ID for continuity")
     voice_id: Optional[str] = Field(None, description="Override voice ID for response")
+    persona: Optional[str] = Field("jarvis", description="AI persona: 'jarvis' or 'tars'")
+    speed: Optional[float] = Field(1.0, ge=0.5, le=2.0, description="Speech speed multiplier")
 
 
 class VoiceChatResponse(BaseModel):
@@ -168,11 +182,21 @@ async def voice_chat(
 
         logger.info(f"AI response: '{response_text[:50]}...'")
 
+        # Select voice and settings based on persona
+        voice_id = request.voice_id or VOICE_IDS.get(request.persona, VOICE_IDS["jarvis"])
+        voice_settings_dict = VOICE_SETTINGS.get(request.persona, VOICE_SETTINGS["jarvis"])
+        voice_settings = VoiceSettings(
+            stability=voice_settings_dict["stability"],
+            similarity_boost=voice_settings_dict["similarity_boost"],
+            style=voice_settings_dict["style"],
+        )
+
         # Stream audio response
         async def generate():
             async for chunk in tts_client.synthesize_stream(
                 text=response_text,
-                voice_id=request.voice_id,
+                voice_id=voice_id,
+                voice_settings=voice_settings,
             ):
                 yield chunk
 

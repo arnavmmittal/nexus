@@ -303,43 +303,221 @@ function GlowRings({ state, audioLevel }: OrbMeshProps) {
   );
 }
 
-// Particle system for thinking state
-function ThinkingParticles({ state }: { state: VoiceState }) {
+// Main particle sphere that forms the orb shape (always visible)
+function OrbParticles({ state, audioLevel }: OrbMeshProps) {
   const particlesRef = useRef<THREE.Points>(null);
-  const particleCount = 100;
+  const materialRef = useRef<THREE.ShaderMaterial>(null);
+  const particleCount = 2000;
 
-  const geometry = useMemo(() => {
-    const geo = new THREE.BufferGeometry();
+  const { positions, originalPositions, sizes, phases } = useMemo(() => {
     const positions = new Float32Array(particleCount * 3);
+    const originalPositions = new Float32Array(particleCount * 3);
+    const sizes = new Float32Array(particleCount);
+    const phases = new Float32Array(particleCount);
+
     for (let i = 0; i < particleCount; i++) {
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      const r = 1.5 + Math.random() * 0.5;
-      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-      positions[i * 3 + 2] = r * Math.cos(phi);
+      // Fibonacci sphere distribution for even particle spacing
+      const y = 1 - (i / (particleCount - 1)) * 2;
+      const radiusAtY = Math.sqrt(1 - y * y);
+      const theta = ((i % particleCount) * 2.399963) + Math.random() * 0.1; // Golden angle
+
+      const x = Math.cos(theta) * radiusAtY;
+      const z = Math.sin(theta) * radiusAtY;
+
+      positions[i * 3] = x;
+      positions[i * 3 + 1] = y;
+      positions[i * 3 + 2] = z;
+
+      originalPositions[i * 3] = x;
+      originalPositions[i * 3 + 1] = y;
+      originalPositions[i * 3 + 2] = z;
+
+      sizes[i] = Math.random() * 2 + 1;
+      phases[i] = Math.random() * Math.PI * 2;
     }
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    return geo;
+
+    return { positions, originalPositions, sizes, phases };
+  }, []);
+
+  const shaderMaterial = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uColor: { value: new THREE.Color(stateColors.idle.hex) },
+        uSecondaryColor: { value: new THREE.Color(stateColors.idle.glow) },
+        uAudioLevel: { value: 0 },
+        uState: { value: 0 },
+      },
+      vertexShader: `
+        attribute float aSize;
+        attribute float aPhase;
+
+        uniform float uTime;
+        uniform float uAudioLevel;
+        uniform float uState;
+
+        varying float vAlpha;
+        varying float vDistance;
+
+        void main() {
+          vec3 pos = position;
+          float phase = aPhase;
+
+          // Breathing effect
+          float breathe = sin(uTime * 0.5 + phase * 0.1) * 0.05 + 1.0;
+          pos *= breathe;
+
+          // State-based effects
+          if (uState >= 0.5 && uState < 1.5) {
+            // Listening - expand and pulse
+            float pulse = sin(uTime * 4.0 + phase) * 0.1 * uAudioLevel;
+            pos *= 1.1 + pulse;
+          } else if (uState >= 1.5 && uState < 2.5) {
+            // Thinking - swirl
+            float swirl = uTime * 0.5 + phase;
+            pos.x += sin(swirl + pos.y * 3.0) * 0.1;
+            pos.z += cos(swirl + pos.y * 3.0) * 0.1;
+          } else if (uState >= 2.5) {
+            // Speaking - wave
+            float wave = sin(pos.y * 5.0 + uTime * 4.0) * uAudioLevel * 0.15;
+            pos.x += wave;
+            pos.z += cos(pos.y * 5.0 + uTime * 4.0) * uAudioLevel * 0.1;
+          }
+
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+
+          vDistance = length(pos);
+          vAlpha = 0.6 + uAudioLevel * 0.4;
+
+          float size = aSize * (1.5 + uAudioLevel * 1.0);
+          gl_PointSize = size * (250.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uColor;
+        uniform vec3 uSecondaryColor;
+        uniform float uTime;
+        uniform float uAudioLevel;
+
+        varying float vAlpha;
+        varying float vDistance;
+
+        void main() {
+          vec2 center = gl_PointCoord - 0.5;
+          float dist = length(center);
+          if (dist > 0.5) discard;
+
+          // Soft circular gradient
+          float gradient = 1.0 - smoothstep(0.0, 0.5, dist);
+
+          // Color based on position
+          vec3 color = mix(uColor, uSecondaryColor, vDistance * 0.5);
+
+          // Pulse effect
+          float pulse = sin(uTime * 2.0) * 0.1 + 0.9;
+          color *= pulse;
+
+          // Glow at center
+          color += uSecondaryColor * gradient * 0.3;
+
+          gl_FragColor = vec4(color, vAlpha * gradient);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
   }, []);
 
   useFrame((_, delta) => {
-    if (particlesRef.current && state === 'thinking') {
-      particlesRef.current.rotation.y += delta * 0.5;
-      particlesRef.current.rotation.x += delta * 0.3;
+    if (!particlesRef.current || !materialRef.current) return;
+
+    // Update uniforms
+    const stateNum = state === 'idle' ? 0 : state === 'listening' ? 1 : state === 'thinking' ? 2 : 3;
+    materialRef.current.uniforms.uTime.value += delta;
+    materialRef.current.uniforms.uAudioLevel.value += (audioLevel - materialRef.current.uniforms.uAudioLevel.value) * 0.15;
+    materialRef.current.uniforms.uState.value += (stateNum - materialRef.current.uniforms.uState.value) * 0.1;
+
+    // Color transition
+    const targetColor = new THREE.Color(stateColors[state].hex);
+    const targetSecondary = new THREE.Color(stateColors[state].glow);
+    materialRef.current.uniforms.uColor.value.lerp(targetColor, 0.05);
+    materialRef.current.uniforms.uSecondaryColor.value.lerp(targetSecondary, 0.05);
+
+    // Rotate
+    particlesRef.current.rotation.y += delta * 0.1;
+    if (state === 'thinking') {
+      particlesRef.current.rotation.x += delta * 0.15;
     }
   });
 
-  if (state !== 'thinking') return null;
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+    geo.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
+    return geo;
+  }, [positions, sizes, phases]);
+
+  return (
+    <points ref={particlesRef} geometry={geometry}>
+      <primitive object={shaderMaterial} ref={materialRef} attach="material" />
+    </points>
+  );
+}
+
+// Outer orbital particles
+function OrbitalParticles({ state, audioLevel }: OrbMeshProps) {
+  const particlesRef = useRef<THREE.Points>(null);
+  const particleCount = 500;
+
+  const { positions, sizes, phases } = useMemo(() => {
+    const positions = new Float32Array(particleCount * 3);
+    const sizes = new Float32Array(particleCount);
+    const phases = new Float32Array(particleCount);
+
+    for (let i = 0; i < particleCount; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const r = 1.2 + Math.random() * 0.8;
+
+      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = r * Math.cos(phi);
+
+      sizes[i] = Math.random() * 1.5 + 0.5;
+      phases[i] = Math.random() * Math.PI * 2;
+    }
+
+    return { positions, sizes, phases };
+  }, []);
+
+  useFrame((_, delta) => {
+    if (particlesRef.current) {
+      particlesRef.current.rotation.y += delta * 0.2;
+      if (state === 'thinking') {
+        particlesRef.current.rotation.x += delta * 0.3;
+        particlesRef.current.rotation.z += delta * 0.1;
+      }
+    }
+  });
+
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    return geo;
+  }, [positions]);
 
   return (
     <points ref={particlesRef} geometry={geometry}>
       <pointsMaterial
-        size={0.03}
-        color="#a78bfa"
+        size={0.02}
+        color={stateColors[state].glow}
         transparent
-        opacity={0.8}
+        opacity={state === 'idle' ? 0.3 : 0.6 + audioLevel * 0.4}
         sizeAttenuation
+        blending={THREE.AdditiveBlending}
       />
     </points>
   );
@@ -392,14 +570,14 @@ export function JarvisOrb({ state, audioLevel = 0, size = 160, className = '' }:
           floatIntensity={0.3}
         >
           <group>
-            {/* Main orb */}
-            <OrbMesh state={state} audioLevel={audioLevel} />
+            {/* Main particle orb - dotted appearance */}
+            <OrbParticles state={state} audioLevel={audioLevel} />
+
+            {/* Orbital particles */}
+            <OrbitalParticles state={state} audioLevel={audioLevel} />
 
             {/* Glow rings */}
             <GlowRings state={state} audioLevel={audioLevel} />
-
-            {/* Thinking particles */}
-            <ThinkingParticles state={state} />
           </group>
         </Float>
 

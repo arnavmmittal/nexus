@@ -39,8 +39,8 @@ class ElevenLabsClient:
 
     BASE_URL = "https://api.elevenlabs.io/v1"
     DEFAULT_MODEL = "eleven_turbo_v2"
-    # Adam voice - professional, clear, JARVIS-like
-    DEFAULT_VOICE_ID = "pNInz6obpgDQGcFmaJgB"
+    # George voice - British, warm, captivating - perfect for JARVIS-like assistant
+    DEFAULT_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
 
     def __init__(
         self,

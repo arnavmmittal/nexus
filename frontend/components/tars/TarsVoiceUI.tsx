@@ -1,33 +1,33 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { JarvisOrb } from './JarvisOrb';
-import { useVoice, type VoiceState } from './useVoice';
+import { TarsMonolith } from './TarsMonolith';
+import { useVoice, type VoiceState } from '../jarvis/useVoice';
 import { cn } from '@/lib/utils';
-import { Mic, MicOff, Volume2, Minimize2, ChevronUp, Wifi, WifiOff, Maximize2 } from 'lucide-react';
+import { Mic, MicOff, Minimize2, ChevronUp, Maximize2 } from 'lucide-react';
 import Link from 'next/link';
 
-interface JarvisVoiceUIProps {
+interface TarsVoiceUIProps {
   onMessage?: (transcript: string) => void;
   onResponse?: (response: string) => Promise<void>;
   className?: string;
 }
 
 const stateLabels: Record<VoiceState, string> = {
-  idle: 'Ready, Arnav',
+  idle: 'TARS Online',
   listening: 'Listening...',
   thinking: 'Processing...',
   speaking: 'Speaking...',
 };
 
 const stateColors: Record<VoiceState, string> = {
-  idle: 'text-blue-400',
+  idle: 'text-amber-400',
   listening: 'text-cyan-400',
   thinking: 'text-purple-400',
-  speaking: 'text-emerald-400',
+  speaking: 'text-amber-400',
 };
 
-export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceUIProps) {
+export function TarsVoiceUI({ onMessage, onResponse, className }: TarsVoiceUIProps) {
   const {
     state,
     transcript,
@@ -38,14 +38,13 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
     speakWithAI,
     isSupported,
     isElevenLabsEnabled,
-  } = useVoice({ useElevenLabs: true });
+  } = useVoice({ useElevenLabs: true, persona: 'tars' });
 
   const [isMinimized, setIsMinimized] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [lastResponse, setLastResponse] = useState('');
   const [isHolding, setIsHolding] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const holdTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Handle push-to-talk
   const handleMouseDown = useCallback(() => {
@@ -66,18 +65,19 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
     if (state === 'thinking' && transcript) {
       onMessage?.(transcript);
 
-      // Process with real AI
       const processMessage = async () => {
         try {
-          const response = await speakWithAI(transcript);
+          // Add TARS personality prefix to get TARS-like responses
+          const tarsPrompt = `[Respond as TARS from Interstellar - dry wit, humor setting at 75%, helpful but with occasional sarcasm] ${transcript}`;
+          const response = await speakWithAI(tarsPrompt);
           setLastResponse(response);
 
           if (onResponse) {
             await onResponse(response);
           }
         } catch (err) {
-          console.error('Voice chat error:', err);
-          setError(err instanceof Error ? err.message : 'Failed to process voice chat');
+          console.error('TARS voice chat error:', err);
+          setError(err instanceof Error ? err.message : 'Failed to process');
         }
       };
 
@@ -85,39 +85,10 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
     }
   }, [state, transcript, onMessage, onResponse, speakWithAI]);
 
-  // Keyboard shortcut (Space to talk)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !e.repeat && document.activeElement?.tagName !== 'INPUT') {
-        e.preventDefault();
-        if (!isHolding && state === 'idle') {
-          handleMouseDown();
-        }
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && document.activeElement?.tagName !== 'INPUT') {
-        e.preventDefault();
-        handleMouseUp();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [handleMouseDown, handleMouseUp, isHolding, state]);
-
-  // Cleanup timeout on unmount
+  // Cleanup
   useEffect(() => {
     return () => {
-      if (holdTimeoutRef.current) {
-        clearTimeout(holdTimeoutRef.current);
-      }
+      // Cleanup if needed
     };
   }, []);
 
@@ -126,21 +97,17 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
       <button
         onClick={() => setIsMinimized(false)}
         className={cn(
-          'fixed bottom-6 right-6 z-50',
-          'w-14 h-14 rounded-full',
-          'glass-panel border border-white/10',
+          'fixed bottom-6 left-6 z-50',
+          'w-14 h-14 rounded-lg',
+          'glass-panel border border-amber-500/20',
           'flex items-center justify-center',
           'hover:scale-105 transition-transform',
-          'shadow-lg shadow-blue-500/20',
+          'shadow-lg shadow-amber-500/10',
           className
         )}
       >
-        <div className="relative">
-          <Volume2 className="w-6 h-6 text-blue-400" />
-          <div className={cn(
-            'absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border border-background',
-            isElevenLabsEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-yellow-500'
-          )} />
+        <div className="w-6 h-8 bg-gradient-to-b from-gray-500 to-gray-600 rounded-sm border border-gray-400/50">
+          <div className="w-full h-1 mt-2 bg-amber-400/80" />
         </div>
       </button>
     );
@@ -149,7 +116,7 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
   return (
     <div
       className={cn(
-        'fixed bottom-6 right-6 z-50',
+        'fixed bottom-6 left-6 z-50',
         'flex flex-col items-center',
         isExpanded ? 'w-80' : 'w-48',
         'transition-all duration-300',
@@ -159,7 +126,7 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
       {/* Control buttons */}
       <div className="absolute -top-2 right-0 flex gap-1">
         <Link
-          href="/jarvis"
+          href="/tars"
           className="w-6 h-6 rounded-md glass-panel border border-white/10 flex items-center justify-center hover:bg-white/5"
           title="Full screen mode"
         >
@@ -187,31 +154,23 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
       {/* Main container */}
       <div
         className={cn(
-          'glass-panel rounded-2xl border border-white/10',
+          'glass-panel rounded-2xl border border-amber-500/20',
           'p-4 backdrop-blur-xl',
           'shadow-2xl shadow-black/50',
           'transition-all duration-300',
           isExpanded ? 'w-full' : 'w-48'
         )}
       >
-        {/* ElevenLabs status indicator */}
-        <div className="flex items-center justify-center gap-1 mb-2 text-xs">
-          {isElevenLabsEnabled ? (
-            <>
-              <Wifi className="w-3 h-3 text-emerald-400" />
-              <span className="text-emerald-400">ElevenLabs</span>
-            </>
-          ) : (
-            <>
-              <WifiOff className="w-3 h-3 text-yellow-400" />
-              <span className="text-yellow-400">Web Speech</span>
-            </>
-          )}
+        {/* TARS label */}
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <span className="text-xs font-mono text-amber-400">TARS</span>
+          <span className="text-xs text-gray-500">|</span>
+          <span className="text-xs text-gray-400">Humor: 75%</span>
         </div>
 
-        {/* The Orb */}
+        {/* The Monolith */}
         <div className="flex justify-center">
-          <JarvisOrb
+          <TarsMonolith
             state={state}
             audioLevel={audioLevel}
             size={isExpanded ? 180 : 120}
@@ -220,7 +179,7 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
 
         {/* State indicator */}
         <div className="mt-4 text-center">
-          <p className={cn('text-sm font-medium', stateColors[state])}>
+          <p className={cn('text-sm font-medium font-mono', stateColors[state])}>
             {stateLabels[state]}
           </p>
         </div>
@@ -235,8 +194,8 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
         {/* Transcript display */}
         {(transcript || interimTranscript) && (
           <div className="mt-3 p-3 rounded-lg bg-white/5 border border-white/10">
-            <p className="text-xs text-muted-foreground mb-1">You said:</p>
-            <p className="text-sm">
+            <p className="text-xs text-muted-foreground mb-1">Input:</p>
+            <p className="text-sm font-mono">
               {transcript || <span className="text-muted-foreground">{interimTranscript}</span>}
             </p>
           </div>
@@ -244,9 +203,9 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
 
         {/* Last response (expanded view) */}
         {isExpanded && lastResponse && state === 'idle' && (
-          <div className="mt-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-            <p className="text-xs text-emerald-400 mb-1">Nexus:</p>
-            <p className="text-sm text-emerald-100">{lastResponse}</p>
+          <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <p className="text-xs text-amber-400 mb-1">TARS:</p>
+            <p className="text-sm text-amber-100 font-mono">{lastResponse}</p>
           </div>
         )}
 
@@ -259,13 +218,13 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
           onTouchEnd={handleMouseUp}
           disabled={!isSupported || state === 'thinking' || state === 'speaking'}
           className={cn(
-            'mt-4 w-full py-3 px-4 rounded-xl',
+            'mt-4 w-full py-3 px-4 rounded-lg',
             'flex items-center justify-center gap-2',
             'transition-all duration-200',
-            'font-medium text-sm',
+            'font-mono text-sm',
             isHolding
-              ? 'bg-cyan-500/30 border-2 border-cyan-400 text-cyan-300 scale-95'
-              : 'bg-white/5 border border-white/10 text-white/80 hover:bg-white/10',
+              ? 'bg-amber-500/30 border-2 border-amber-400 text-amber-300 scale-95'
+              : 'bg-white/5 border border-amber-500/30 text-white/80 hover:bg-white/10',
             (state === 'thinking' || state === 'speaking') && 'opacity-50 cursor-not-allowed',
             !isSupported && 'opacity-50 cursor-not-allowed'
           )}
@@ -289,19 +248,16 @@ export function JarvisVoiceUI({ onMessage, onResponse, className }: JarvisVoiceU
         </button>
 
         {/* Keyboard hint */}
-        <p className="mt-2 text-center text-xs text-muted-foreground">
-          or hold{' '}
-          <kbd className="px-1.5 py-0.5 text-[10px] bg-white/10 rounded border border-white/10">
-            Space
-          </kbd>
+        <p className="mt-2 text-center text-xs text-muted-foreground font-mono">
+          Absolute honesty isn't always the most diplomatic...
         </p>
       </div>
 
-      {/* Audio level indicator bar */}
+      {/* Audio level indicator */}
       {state === 'listening' && (
         <div className="mt-2 w-32 h-1 rounded-full bg-white/10 overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-cyan-400 to-cyan-300 transition-all duration-75"
+            className="h-full bg-gradient-to-r from-amber-400 to-amber-300 transition-all duration-75"
             style={{ width: `${audioLevel * 100}%` }}
           />
         </div>

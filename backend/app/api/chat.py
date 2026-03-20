@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Placeholder user ID (will be replaced with auth later)
 DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
-DEFAULT_USER_NAME = "User"
+DEFAULT_USER_NAME = "Arnav Mittal"
 
 
 class ConnectionManager:

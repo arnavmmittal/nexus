@@ -159,6 +159,7 @@ export interface VoiceChatRequest {
   text: string;
   conversation_id?: string;
   voice_id?: string;
+  persona?: 'jarvis' | 'tars';
 }
 
 class ApiClient {

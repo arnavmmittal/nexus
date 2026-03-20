@@ -38,6 +38,10 @@ declare global {
 export interface UseVoiceOptions {
   useElevenLabs?: boolean;
   voiceId?: string;
+  persona?: 'jarvis' | 'tars';
+  continuous?: boolean;           // Keep listening after processing
+  silenceTimeout?: number;        // Ms of silence before auto-stop (default 1500)
+  playbackSpeed?: number;         // Speech playback speed (default 1.15 for Jarvis)
 }
 
 export interface UseVoiceReturn {
@@ -47,6 +51,7 @@ export interface UseVoiceReturn {
   audioLevel: number;
   startListening: () => void;
   stopListening: () => void;
+  stopSpeaking: () => void;       // Interrupt current speech
   speak: (text: string) => Promise<void>;
   speakWithAI: (text: string) => Promise<string>;
   getAudioData: () => Float32Array | null;
@@ -55,7 +60,14 @@ export interface UseVoiceReturn {
 }
 
 export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
-  const { useElevenLabs = true, voiceId } = options || {};
+  const {
+    useElevenLabs = true,
+    voiceId,
+    persona = 'jarvis',
+    continuous = false,
+    silenceTimeout = 1500,
+    playbackSpeed = persona === 'jarvis' ? 1.15 : 1.0,
+  } = options || {};
 
   const [state, setState] = useState<VoiceState>('idle');
   const [transcript, setTranscript] = useState('');
@@ -73,6 +85,10 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
   const streamRef = useRef<MediaStream | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const conversationIdRef = useRef<string | null>(null);
+  const silenceTimeoutIdRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSpeechTimeRef = useRef<number>(Date.now());
+  const speakingAnimationFrameRef = useRef<number | null>(null);
+  const continuousModeRef = useRef<boolean>(continuous);
 
   // Check for browser support and ElevenLabs status
   useEffect(() => {
@@ -152,6 +168,29 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
     setAudioLevel(0);
   }, []);
 
+  // Clear silence timeout
+  const clearSilenceTimeout = useCallback(() => {
+    if (silenceTimeoutIdRef.current) {
+      clearTimeout(silenceTimeoutIdRef.current);
+      silenceTimeoutIdRef.current = null;
+    }
+  }, []);
+
+  // Reset silence timeout (called when speech is detected)
+  const resetSilenceTimeout = useCallback(() => {
+    clearSilenceTimeout();
+    lastSpeechTimeRef.current = Date.now();
+
+    if (continuous) {
+      silenceTimeoutIdRef.current = setTimeout(() => {
+        // User has been silent for silenceTimeout ms, stop listening
+        if (recognitionRef.current && state === 'listening') {
+          recognitionRef.current.stop();
+        }
+      }, silenceTimeout);
+    }
+  }, [continuous, silenceTimeout, clearSilenceTimeout, state]);
+
   // Start listening for voice input
   const startListening = useCallback(() => {
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -160,13 +199,20 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
       return;
     }
 
+    // If we're speaking, interrupt first
+    if (state === 'speaking') {
+      stopSpeaking();
+    }
+
     // Clean up any existing recognition
     if (recognitionRef.current) {
       recognitionRef.current.abort();
     }
+    clearSilenceTimeout();
 
     const recognition = new SpeechRecognitionAPI();
-    recognition.continuous = false;
+    // Use continuous mode for voice-activated, but we'll manage when to stop
+    recognition.continuous = continuous;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
@@ -175,6 +221,10 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
       setTranscript('');
       setInterimTranscript('');
       initAudioContext();
+      if (continuous) {
+        // Start silence detection
+        resetSilenceTimeout();
+      }
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
@@ -190,8 +240,13 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
         }
       }
 
+      // Reset silence timeout whenever we get speech
+      if (continuous && (finalTranscript || interimText)) {
+        resetSilenceTimeout();
+      }
+
       if (finalTranscript) {
-        setTranscript(finalTranscript);
+        setTranscript((prev) => prev + finalTranscript);
         setInterimTranscript('');
       } else {
         setInterimTranscript(interimText);
@@ -199,12 +254,18 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      // Ignore no-speech errors in continuous mode
+      if (event.error === 'no-speech' && continuous) {
+        return;
+      }
       console.error('Speech recognition error:', event.error);
       setState('idle');
       cleanupAudioContext();
+      clearSilenceTimeout();
     };
 
     recognition.onend = () => {
+      clearSilenceTimeout();
       // Only go to idle if we're not transitioning to thinking/speaking
       if (state === 'listening') {
         setState('idle');
@@ -219,10 +280,11 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
     } catch (error) {
       console.error('Failed to start speech recognition:', error);
     }
-  }, [initAudioContext, cleanupAudioContext, state]);
+  }, [initAudioContext, cleanupAudioContext, state, continuous, resetSilenceTimeout, clearSilenceTimeout, stopSpeaking]);
 
   // Stop listening
   const stopListening = useCallback(() => {
+    clearSilenceTimeout();
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
@@ -235,7 +297,7 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
     } else {
       setState('idle');
     }
-  }, [cleanupAudioContext, transcript, interimTranscript]);
+  }, [cleanupAudioContext, transcript, interimTranscript, clearSilenceTimeout]);
 
   // Speak text using ElevenLabs or Web Speech API
   const speak = useCallback(async (text: string): Promise<void> => {
@@ -255,6 +317,7 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
 
         return new Promise((resolve) => {
           const audio = new Audio(audioUrl);
+          audio.playbackRate = playbackSpeed;
           audioElementRef.current = audio;
 
           // Simple speaking animation
@@ -301,7 +364,31 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
 
     // Use Web Speech API
     return fallbackToWebSpeech(text);
-  }, [useElevenLabs, isElevenLabsEnabled, voiceId]);
+  }, [useElevenLabs, isElevenLabsEnabled, voiceId, playbackSpeed]);
+
+  // Stop current speech (interrupt)
+  const stopSpeaking = useCallback(() => {
+    // Stop ElevenLabs audio
+    if (audioElementRef.current) {
+      audioElementRef.current.pause();
+      audioElementRef.current.currentTime = 0;
+      audioElementRef.current = null;
+    }
+
+    // Stop Web Speech API
+    if (typeof speechSynthesis !== 'undefined') {
+      speechSynthesis.cancel();
+    }
+
+    // Cancel any speaking animation
+    if (speakingAnimationFrameRef.current) {
+      cancelAnimationFrame(speakingAnimationFrameRef.current);
+      speakingAnimationFrameRef.current = null;
+    }
+
+    setAudioLevel(0);
+    setState('idle');
+  }, []);
 
   // Fallback to Web Speech API
   const fallbackToWebSpeech = useCallback((text: string): Promise<void> => {
@@ -365,6 +452,7 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
           text,
           conversation_id: conversationIdRef.current || undefined,
           voice_id: voiceId,
+          persona,
         });
 
         // Get text response from header
@@ -381,14 +469,14 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
 
         await new Promise<void>((resolve) => {
           const audio = new Audio(audioUrl);
+          audio.playbackRate = playbackSpeed;
           audioElementRef.current = audio;
 
-          let speakingAnimationFrame: number;
           const animateSpeaking = () => {
             const time = Date.now() / 100;
             const level = 0.5 + 0.3 * Math.sin(time) + 0.1 * Math.sin(time * 2.5);
             setAudioLevel(level);
-            speakingAnimationFrame = requestAnimationFrame(animateSpeaking);
+            speakingAnimationFrameRef.current = requestAnimationFrame(animateSpeaking);
           };
 
           audio.onplay = () => {
@@ -396,7 +484,10 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
           };
 
           audio.onended = () => {
-            cancelAnimationFrame(speakingAnimationFrame);
+            if (speakingAnimationFrameRef.current) {
+              cancelAnimationFrame(speakingAnimationFrameRef.current);
+              speakingAnimationFrameRef.current = null;
+            }
             setAudioLevel(0);
             setState('idle');
             URL.revokeObjectURL(audioUrl);
@@ -404,7 +495,10 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
           };
 
           audio.onerror = () => {
-            cancelAnimationFrame(speakingAnimationFrame);
+            if (speakingAnimationFrameRef.current) {
+              cancelAnimationFrame(speakingAnimationFrameRef.current);
+              speakingAnimationFrameRef.current = null;
+            }
             setAudioLevel(0);
             setState('idle');
             URL.revokeObjectURL(audioUrl);
@@ -437,7 +531,7 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
       setState('idle');
       throw error;
     }
-  }, [useElevenLabs, isElevenLabsEnabled, voiceId, speak]);
+  }, [useElevenLabs, isElevenLabsEnabled, voiceId, persona, speak, playbackSpeed]);
 
   // Get current audio frequency data for visualization
   const getAudioData = useCallback((): Float32Array | null => {
@@ -457,6 +551,12 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
       if (audioElementRef.current) {
         audioElementRef.current.pause();
       }
+      if (silenceTimeoutIdRef.current) {
+        clearTimeout(silenceTimeoutIdRef.current);
+      }
+      if (speakingAnimationFrameRef.current) {
+        cancelAnimationFrame(speakingAnimationFrameRef.current);
+      }
       cleanupAudioContext();
       if (audioContextRef.current) {
         audioContextRef.current.close();
@@ -471,6 +571,7 @@ export function useVoice(options?: UseVoiceOptions): UseVoiceReturn {
     audioLevel,
     startListening,
     stopListening,
+    stopSpeaking,
     speak,
     speakWithAI,
     getAudioData,
