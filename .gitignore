@@ -37,6 +37,7 @@ logs/
 
 # Vector store data (can be large)
 data/vectors/
+data/chroma/
 
 # Task management
 tasks/

@@ -1,0 +1,4 @@
+# This directory contains local development data
+# - chroma/: ChromaDB vector database storage
+
+# Contents are gitignored but directory structure is preserved

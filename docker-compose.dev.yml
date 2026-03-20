@@ -1,0 +1,32 @@
+# Nexus Development Overrides
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+services:
+  chromadb:
+    # Development settings for ChromaDB
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+      - ALLOW_RESET=TRUE
+      - CHROMA_LOG_LEVEL=DEBUG
+    # Mount local data directory for persistence
+    volumes:
+      - ./data/chroma:/chroma/chroma
+
+  redis:
+    # Development settings for Redis
+    command: redis-server --appendonly yes --loglevel verbose
+    # Expose additional port for Redis Insight debugging
+    ports:
+      - "6379:6379"
+
+  # Redis Insight - GUI for Redis (development only)
+  redis-insight:
+    image: redislabs/redisinsight:latest
+    container_name: nexus-redis-insight
+    ports:
+      - "8002:5540"
+    depends_on:
+      - redis
+    profiles:
+      - debug
