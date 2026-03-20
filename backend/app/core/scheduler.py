@@ -1,9 +1,11 @@
 """Background task scheduler for periodic operations."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -168,7 +170,7 @@ async def stop_scheduler() -> None:
     _scheduler = None
 
 
-def get_scheduled_jobs() -> list[dict[str, Any]]:
+def get_scheduled_jobs() -> List[dict[str, Any]]:
     """Get information about scheduled jobs."""
     scheduler = get_scheduler()
     jobs = []

@@ -1,7 +1,9 @@
 """User model."""
 
+from __future__ import annotations
+
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Optional, Dict
 from uuid import UUID
 
 from sqlalchemy import String, func
@@ -26,8 +28,8 @@ class User(Base):
         primary_key=True,
         default=generate_uuid,
     )
-    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     settings: Mapped[dict[str, Any]] = mapped_column(JSONType(), default=dict)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 

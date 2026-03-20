@@ -7,13 +7,15 @@ Parses Claude Code JSONL conversation files and extracts:
 - Skills practiced (programming languages, frameworks, tools)
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from sqlalchemy import select
@@ -135,8 +137,8 @@ class ClaudeMessage:
     content: str
     timestamp: datetime
     uuid: str
-    thinking: str | None = None
-    code_blocks: list[CodeBlock] = field(default_factory=list)
+    thinking: Optional[str] = None
+    code_blocks: List[CodeBlock] = field(default_factory=list)
 
 
 @dataclass
@@ -147,11 +149,11 @@ class ClaudeSession:
     project_path: str
     started_at: datetime | None
     ended_at: datetime | None
-    messages: list[ClaudeMessage] = field(default_factory=list)
+    messages: List[ClaudeMessage] = field(default_factory=list)
     detected_skills: dict[str, int] = field(default_factory=dict)
-    detected_decisions: list[str] = field(default_factory=list)
-    git_branch: str | None = None
-    version: str | None = None
+    detected_decisions: List[str] = field(default_factory=list)
+    git_branch: Optional[str] = None
+    version: Optional[str] = None
 
     @property
     def duration_minutes(self) -> int:
@@ -183,7 +185,7 @@ class ClaudeSync:
 
     def __init__(
         self,
-        history_path: str | None = None,
+        history_path: Optional[str] = None,
         vector_store: VectorStore | None = None,
     ):
         """
@@ -199,7 +201,7 @@ class ClaudeSync:
         if not self.history_path.exists():
             logger.warning(f"Claude history path not found: {self.history_path}")
 
-    def discover_projects(self) -> list[dict[str, Any]]:
+    def discover_projects(self) -> List[dict[str, Any]]:
         """
         Discover all Claude Code projects.
 
@@ -351,7 +353,7 @@ class ClaudeSync:
                 )
                 messages.append(message)
 
-    def _extract_code_blocks(self, text: str) -> list[CodeBlock]:
+    def _extract_code_blocks(self, text: str) -> List[CodeBlock]:
         """Extract code blocks from markdown text."""
         blocks = []
         pattern = r"```(\w*)\n(.*?)```"
@@ -605,7 +607,7 @@ class ClaudeSync:
 
     async def sync_directory(
         self,
-        directory: str | None,
+        directory: Optional[str],
         user_id: UUID,
         db: AsyncSession,
         force: bool = False,
@@ -684,7 +686,7 @@ class ClaudeSync:
         query: str,
         user_id: str,
         limit: int = 10,
-    ) -> list[dict[str, Any]]:
+    ) -> List[dict[str, Any]]:
         """
         Search Claude conversations using semantic search.
 
@@ -710,7 +712,7 @@ class ClaudeSync:
             r for r in results if r.get("metadata", {}).get("source") == "claude_code"
         ]
 
-    def list_sessions(self, project_path: str | None = None) -> list[dict[str, Any]]:
+    def list_sessions(self, project_path: Optional[str] = None) -> List[dict[str, Any]]:
         """
         List available Claude Code sessions.
 

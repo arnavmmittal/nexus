@@ -1,8 +1,10 @@
 """ChromaDB vector store for semantic search."""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
@@ -24,7 +26,7 @@ class VectorStore:
 
     COLLECTION_NAME = "nexus_memories"
 
-    def __init__(self, persist_directory: str | None = None):
+    def __init__(self, persist_directory: Optional[str] = None):
         """
         Initialize vector store.
 
@@ -58,7 +60,7 @@ class VectorStore:
         content: str,
         user_id: str,
         metadata: dict[str, Any] | None = None,
-        document_id: str | None = None,
+        document_id: Optional[str] = None,
     ) -> str:
         """
         Add a document to the vector store.
@@ -94,11 +96,11 @@ class VectorStore:
 
     async def add_documents(
         self,
-        contents: list[str],
+        contents: List[str],
         user_id: str,
-        metadatas: list[dict[str, Any]] | None = None,
-        document_ids: list[str] | None = None,
-    ) -> list[str]:
+        metadatas: List[dict[str, Any]] | None = None,
+        document_ids: List[str] | None = None,
+    ) -> List[str]:
         """
         Add multiple documents to the vector store.
 
@@ -139,7 +141,7 @@ class VectorStore:
         user_id: str,
         limit: int = 5,
         min_score: float = 0.0,
-    ) -> list[dict[str, Any]]:
+    ) -> List[dict[str, Any]]:
         """
         Search for relevant documents.
 

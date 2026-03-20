@@ -1,3 +1,4 @@
+from __future__ import annotations
 """System prompts for Nexus AI."""
 
 SYSTEM_PROMPT = """You are Nexus, a personal AI assistant for {user_name}.

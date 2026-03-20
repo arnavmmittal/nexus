@@ -1,7 +1,9 @@
 """Memory models - Facts, Patterns, Conversations."""
 
+from __future__ import annotations
+
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Dict, Optional, Optional, Dict
 from uuid import UUID
 
 from sqlalchemy import Float, ForeignKey, String, Text, func
@@ -35,7 +37,7 @@ class Fact(Base):
     key: Mapped[str] = mapped_column(String(255), nullable=False)
     value: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, default=1.0)
-    source: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(), onupdate=func.now()
@@ -89,13 +91,13 @@ class Conversation(Base):
     source: Mapped[str] = mapped_column(
         String(50), nullable=False
     )  # 'nexus', 'claude_code', 'claude_web'
-    started_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    ended_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    extracted_facts: Mapped[dict[str, Any] | None] = mapped_column(
+    started_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    ended_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    extracted_facts: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         JSONType(), nullable=True
     )
-    extracted_skills: Mapped[dict[str, Any] | None] = mapped_column(
+    extracted_skills: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         JSONType(), nullable=True
     )
 

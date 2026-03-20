@@ -1,8 +1,9 @@
+from __future__ import annotations
 """API endpoints for external integrations."""
 
 import logging
 from datetime import datetime, timedelta
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -48,19 +49,19 @@ class GitHubConnectResponse(BaseModel):
     """Response after connecting GitHub."""
 
     status: str
-    user: str | None = None
+    user: Optional[str] = None
     message: str
 
 
 class GitHubActivityResponse(BaseModel):
     """Response containing GitHub activity."""
 
-    user: str | None = None
-    commits: list[dict[str, Any]] = []
-    pull_requests: list[dict[str, Any]] = []
-    issues: list[dict[str, Any]] = []
+    user: Optional[str] = None
+    commits: List[dict[str, Any]] = []
+    pull_requests: List[dict[str, Any]] = []
+    issues: List[dict[str, Any]] = []
     repos_analyzed: int = 0
-    error: str | None = None
+    error: Optional[str] = None
 
 
 class GitHubStatsResponse(BaseModel):
@@ -68,7 +69,7 @@ class GitHubStatsResponse(BaseModel):
 
     commit_stats: dict[str, Any] = {}
     language_stats: dict[str, Any] = {}
-    error: str | None = None
+    error: Optional[str] = None
 
 
 class GitHubSyncRequest(BaseModel):
@@ -85,13 +86,13 @@ class GitHubSyncResponse(BaseModel):
     prs_processed: int = 0
     xp_awarded: dict[str, int] = {}
     total_xp: int = 0
-    error: str | None = None
+    error: Optional[str] = None
 
 
 # --- Helper to get integration ---
 
 
-def get_github(token: str | None = None) -> GitHubIntegration:
+def get_github(token: Optional[str] = None) -> GitHubIntegration:
     """Get GitHub integration instance."""
     return get_github_integration(token)
 
@@ -709,8 +710,8 @@ class PlaidExchangeRequest(BaseModel):
     """Request to exchange public token."""
 
     public_token: str = Field(..., description="The public token from Plaid Link")
-    institution_id: str | None = Field(None, description="Institution ID")
-    institution_name: str | None = Field(None, description="Institution name")
+    institution_id: Optional[str] = Field(None, description="Institution ID")
+    institution_name: Optional[str] = Field(None, description="Institution name")
 
 
 class PlaidExchangeResponse(BaseModel):
@@ -718,7 +719,7 @@ class PlaidExchangeResponse(BaseModel):
 
     item_id: str
     accounts_count: int
-    institution_name: str | None = None
+    institution_name: Optional[str] = None
 
 
 class PlaidAccountResponse(BaseModel):
@@ -726,12 +727,12 @@ class PlaidAccountResponse(BaseModel):
 
     id: str
     name: str
-    official_name: str | None = None
+    official_name: Optional[str] = None
     type: str
-    subtype: str | None = None
-    mask: str | None = None
-    current_balance: float | None = None
-    available_balance: float | None = None
+    subtype: Optional[str] = None
+    mask: Optional[str] = None
+    current_balance: Optional[float] = None
+    available_balance: Optional[float] = None
     currency: str = "USD"
     include_in_net_worth: bool = True
 
@@ -739,7 +740,7 @@ class PlaidAccountResponse(BaseModel):
 class PlaidBalancesResponse(BaseModel):
     """Balances response with net worth calculation."""
 
-    accounts: list[PlaidAccountResponse]
+    accounts: List[PlaidAccountResponse]
     total_assets: float
     total_liabilities: float
     net_worth: float
@@ -750,9 +751,9 @@ class PlaidTransactionResponse(BaseModel):
     """Transaction response."""
 
     id: str
-    date: str | None
+    date: Optional[str]
     name: str
-    merchant_name: str | None = None
+    merchant_name: Optional[str] = None
     amount: float
     category: str
     pending: bool = False
@@ -761,7 +762,7 @@ class PlaidTransactionResponse(BaseModel):
 class PlaidTransactionsResponse(BaseModel):
     """Transactions list response."""
 
-    transactions: list[PlaidTransactionResponse]
+    transactions: List[PlaidTransactionResponse]
     total_count: int
     period: dict[str, Any]
     summary: dict[str, Any]
@@ -773,7 +774,7 @@ class PlaidConnectionStatus(BaseModel):
     connected: bool
     items_count: int
     accounts_count: int
-    institutions: list[str]
+    institutions: List[str]
 
 
 # ============================================================================
@@ -915,7 +916,7 @@ async def get_plaid_connection_status(
 @router.get("/plaid/accounts")
 async def get_plaid_accounts(
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> list[dict[str, Any]]:
+) -> List[dict[str, Any]]:
     """
     Get all connected Plaid accounts.
 

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Google Calendar integration using OAuth2."""
 
 import logging

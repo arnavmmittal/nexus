@@ -1,6 +1,9 @@
 """Pydantic schemas for skills."""
 
+from __future__ import annotations
+
 from datetime import datetime
+from typing import List, Optional, TYPE_CHECKING
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -21,7 +24,7 @@ class SkillXPLogCreate(BaseModel):
         default="manual",
         description="Source of XP: 'claude_session', 'manual', 'integration'",
     )
-    description: str | None = Field(default=None, description="Optional description")
+    description: Optional[str] = Field(default=None, description="Optional description")
 
 
 class SkillXPLogResponse(BaseModel):
@@ -31,7 +34,7 @@ class SkillXPLogResponse(BaseModel):
     skill_id: UUID
     xp_amount: int
     source: str
-    description: str | None
+    description: Optional[str]
     logged_at: datetime
 
     model_config = {"from_attributes": True}
@@ -50,7 +53,7 @@ class SkillResponse(BaseModel):
     xp_for_next_level: int
     level_progress: float
     created_at: datetime
-    last_practiced: datetime | None
+    last_practiced: Optional[datetime]
 
     model_config = {"from_attributes": True}
 
@@ -59,6 +62,6 @@ class SkillWithHistoryResponse(BaseModel):
     """Schema for skill with XP history."""
 
     skill: SkillResponse
-    history: list[SkillXPLogResponse]
+    history: List[SkillXPLogResponse]
 
     model_config = {"from_attributes": True}

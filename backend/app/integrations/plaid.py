@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Plaid integration for banking and investment data.
 
 This module provides integration with Plaid API to:
@@ -11,7 +12,7 @@ Plaid sandbox mode is free and provides test data for development.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 import httpx
 from plaid.api import plaid_api
@@ -133,7 +134,7 @@ class PlaidIntegration:
             logger.error(f"Failed to exchange public token: {e}")
             raise
 
-    async def get_accounts(self, access_token: str) -> list[dict[str, Any]]:
+    async def get_accounts(self, access_token: str) -> List[dict[str, Any]]:
         """
         Get all accounts associated with an access token.
 

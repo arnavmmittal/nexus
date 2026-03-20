@@ -1,7 +1,9 @@
 """Goal models - Goals, Progress, Streaks, Achievements."""
 
+from __future__ import annotations
+
 from datetime import date, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional, Optional, Dict
 from uuid import UUID
 
 from sqlalchemy import Date, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
@@ -34,13 +36,13 @@ class Goal(Base):
     target_type: Mapped[str] = mapped_column(
         String(50), nullable=False
     )  # 'numeric', 'boolean', 'streak'
-    target_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_value: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     current_value: Mapped[float] = mapped_column(Float, default=0)
-    unit: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    deadline: Mapped[date | None] = mapped_column(Date, nullable=True)
+    unit: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    deadline: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="active")
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="goals")
@@ -102,7 +104,7 @@ class Streak(Base):
     activity: Mapped[str] = mapped_column(String(255), nullable=False)
     current_count: Mapped[int] = mapped_column(Integer, default=0)
     longest_count: Mapped[int] = mapped_column(Integer, default=0)
-    last_logged: Mapped[date | None] = mapped_column(Date, nullable=True)
+    last_logged: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     # Relationships

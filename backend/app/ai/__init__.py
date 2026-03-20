@@ -1,3 +1,4 @@
+from __future__ import annotations
 """AI engine for Nexus - Claude integration and context assembly."""
 
 from app.ai.engine import AIEngine

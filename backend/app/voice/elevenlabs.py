@@ -6,7 +6,7 @@ Uses eleven_turbo_v2 model for low latency, JARVIS-like voice responses.
 
 import logging
 from dataclasses import dataclass
-from typing import AsyncIterator
+from typing import AsyncIterator, List, Optional
 
 import httpx
 
@@ -44,9 +44,9 @@ class ElevenLabsClient:
 
     def __init__(
         self,
-        api_key: str | None = None,
-        voice_id: str | None = None,
-        voice_settings: VoiceSettings | None = None,
+        api_key: Optional[str] = None,
+        voice_id: Optional[str] = None,
+        voice_settings: Optional[VoiceSettings] = None,
     ):
         """Initialize ElevenLabs client.
 
@@ -76,8 +76,8 @@ class ElevenLabsClient:
     def _build_request_body(
         self,
         text: str,
-        model_id: str | None = None,
-        voice_settings: VoiceSettings | None = None,
+        model_id: Optional[str] = None,
+        voice_settings: Optional[VoiceSettings] = None,
     ) -> dict:
         """Build request body for TTS synthesis.
 
@@ -104,9 +104,9 @@ class ElevenLabsClient:
     async def synthesize_stream(
         self,
         text: str,
-        voice_id: str | None = None,
-        model_id: str | None = None,
-        voice_settings: VoiceSettings | None = None,
+        voice_id: Optional[str] = None,
+        model_id: Optional[str] = None,
+        voice_settings: Optional[VoiceSettings] = None,
         chunk_size: int = 1024,
     ) -> AsyncIterator[bytes]:
         """Stream audio chunks as they're generated.
@@ -155,9 +155,9 @@ class ElevenLabsClient:
     async def synthesize(
         self,
         text: str,
-        voice_id: str | None = None,
-        model_id: str | None = None,
-        voice_settings: VoiceSettings | None = None,
+        voice_id: Optional[str] = None,
+        model_id: Optional[str] = None,
+        voice_settings: Optional[VoiceSettings] = None,
     ) -> bytes:
         """Synthesize speech and return complete audio.
 
@@ -185,7 +185,7 @@ class ElevenLabsClient:
 
         return b"".join(chunks)
 
-    async def get_voices(self) -> list[dict]:
+    async def get_voices(self) -> List[dict]:
         """Get available voices from ElevenLabs.
 
         Returns:
@@ -230,7 +230,7 @@ class ElevenLabsClient:
 
 
 # Singleton instance for dependency injection
-_elevenlabs_client: ElevenLabsClient | None = None
+_elevenlabs_client: Optional[ElevenLabsClient] = None
 
 
 def get_elevenlabs_client() -> ElevenLabsClient:

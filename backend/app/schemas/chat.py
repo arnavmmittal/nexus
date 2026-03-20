@@ -1,7 +1,9 @@
 """Pydantic schemas for chat."""
 
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -18,7 +20,7 @@ class ChatRequest(BaseModel):
     """Schema for chat request."""
 
     message: str = Field(..., min_length=1, description="User message")
-    conversation_id: str | None = Field(
+    conversation_id: Optional[str] = Field(
         default=None, description="Conversation ID for context"
     )
 
@@ -34,9 +36,9 @@ class ChatStreamEvent(BaseModel):
     """Schema for streaming chat events."""
 
     type: Literal["content", "done", "error"] = Field(..., description="Event type")
-    content: str | None = Field(default=None, description="Content chunk")
-    conversation_id: str | None = Field(default=None, description="Conversation ID")
-    error: str | None = Field(default=None, description="Error message if any")
+    content: Optional[str] = Field(default=None, description="Content chunk")
+    conversation_id: Optional[str] = Field(default=None, description="Conversation ID")
+    error: Optional[str] = Field(default=None, description="Error message if any")
 
 
 class WidgetSubscription(BaseModel):
@@ -54,5 +56,5 @@ class WebSocketMessage(BaseModel):
         "unsubscribe_widget",
         "ping",
     ] = Field(..., description="Message type")
-    content: str | None = Field(default=None, description="Message content")
-    widget: str | None = Field(default=None, description="Widget name")
+    content: Optional[str] = Field(default=None, description="Message content")
+    widget: Optional[str] = Field(default=None, description="Widget name")

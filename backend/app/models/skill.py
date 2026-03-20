@@ -1,7 +1,9 @@
 """Skill models - Skills and XP logging."""
 
+from __future__ import annotations
+
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional, Optional, Dict
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, Integer, String, Text, UniqueConstraint, func
@@ -36,7 +38,7 @@ class Skill(Base):
     current_xp: Mapped[int] = mapped_column(Integer, default=0)
     total_xp: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    last_practiced: Mapped[datetime | None] = mapped_column(nullable=True)
+    last_practiced: Mapped[Optional[datetime]] = mapped_column(nullable=True)
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="skills")
@@ -75,7 +77,7 @@ class SkillXPLog(Base):
     source: Mapped[str] = mapped_column(
         String(100), nullable=False
     )  # 'claude_session', 'manual', 'integration'
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     logged_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     # Relationships

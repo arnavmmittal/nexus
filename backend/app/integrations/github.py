@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 GitHub Integration for Nexus.
 
@@ -7,7 +8,7 @@ commits, PRs, and language usage.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from github import Github, GithubException, Auth
@@ -124,7 +125,7 @@ EXTENSION_LANGUAGE_MAP = {
 class GitHubIntegration:
     """GitHub integration for tracking coding activity."""
 
-    def __init__(self, token: str | None = None):
+    def __init__(self, token: Optional[str] = None):
         """
         Initialize GitHub integration.
 
@@ -346,7 +347,7 @@ class GitHubIntegration:
             logger.error(f"GitHub API error: {e}")
             return {"error": str(e)}
 
-    def _detect_languages_from_files(self, files: list[str]) -> dict[str, int]:
+    def _detect_languages_from_files(self, files: List[str]) -> dict[str, int]:
         """
         Detect languages from file names/extensions.
 
@@ -634,7 +635,7 @@ class GitHubIntegration:
 _github_integration: GitHubIntegration | None = None
 
 
-def get_github_integration(token: str | None = None) -> GitHubIntegration:
+def get_github_integration(token: Optional[str] = None) -> GitHubIntegration:
     """
     Get or create the GitHub integration singleton.
 

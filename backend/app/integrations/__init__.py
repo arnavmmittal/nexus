@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Integrations module for external service connections."""
 
 from app.integrations.github import GitHubIntegration, get_github_integration

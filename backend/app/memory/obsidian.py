@@ -1,12 +1,14 @@
 """Obsidian vault synchronization with file watching and vector store indexing."""
 
+from __future__ import annotations
+
 import hashlib
 import json
 import logging
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
 
@@ -69,7 +71,7 @@ class SyncStatus:
         self,
         file_count: int,
         indexed_count: int,
-        errors: list[str] | None = None,
+        errors: List[str] | None = None,
     ) -> None:
         """Update sync statistics."""
         self._status["last_sync"] = datetime.utcnow().isoformat()
@@ -95,7 +97,7 @@ def compute_content_hash(content: str) -> str:
     return hashlib.md5(content.encode()).hexdigest()
 
 
-def chunk_content(content: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
+def chunk_content(content: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
     """
     Split content into overlapping chunks for better vector search.
 
@@ -169,7 +171,7 @@ class ObsidianSync:
         r"node_modules/",
     ]
 
-    def __init__(self, vault_path: str | None = None, vector_store: Any | None = None):
+    def __init__(self, vault_path: Optional[str] = None, vector_store: Any | None = None):
         """
         Initialize Obsidian sync.
 
@@ -217,7 +219,7 @@ class ObsidianSync:
             "errors": 0,
             "chunks_created": 0,
         }
-        errors: list[str] = []
+        errors: List[str] = []
 
         # Track current files for deletion detection
         current_files: set[str] = set()
@@ -403,7 +405,7 @@ class ObsidianSync:
                 # Simple key-value extraction (handles basic YAML)
                 result: dict[str, Any] = {}
                 current_key = None
-                current_list: list[str] = []
+                current_list: List[str] = []
 
                 for line in yaml_content.split("\n"):
                     stripped = line.strip()
@@ -451,8 +453,8 @@ class ObsidianSync:
         return False
 
     async def search_notes(
-        self, query: str, user_id: str, limit: int = 5, tags: list[str] | None = None
-    ) -> list[dict[str, Any]]:
+        self, query: str, user_id: str, limit: int = 5, tags: List[str] | None = None
+    ) -> List[dict[str, Any]]:
         """
         Search Obsidian notes semantically.
 
@@ -502,7 +504,7 @@ class ObsidianSync:
 
         return obsidian_results
 
-    def get_recent_notes(self, limit: int = 10) -> list[dict[str, Any]]:
+    def get_recent_notes(self, limit: int = 10) -> List[dict[str, Any]]:
         """
         Get recently modified notes from vault.
 

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """API routes for Nexus backend."""
 
 from fastapi import APIRouter

@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Union
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -70,7 +70,7 @@ class Settings(BaseSettings):
 
     @field_validator("cors_origins", mode="before")
     @classmethod
-    def parse_cors_origins(cls, v: str | List[str]) -> List[str]:
+    def parse_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
         """Parse CORS origins from JSON string or list."""
         if isinstance(v, str):
             try:
@@ -90,7 +90,7 @@ class Settings(BaseSettings):
         return Path(self.chromadb_path).expanduser().resolve()
 
     @property
-    def obsidian_vault_path_resolved(self) -> Path | None:
+    def obsidian_vault_path_resolved(self) -> Optional[Path]:
         """Get resolved Obsidian vault path."""
         if not self.obsidian_vault_path:
             return None

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """AI Engine - Claude integration for Nexus."""
 
 import asyncio
@@ -15,7 +16,8 @@ from app.core.config import settings
 class AIEngine:
     """AI Engine for processing chat messages with Claude."""
 
-    MODEL = "claude-sonnet-4-20250514"
+    # Using Haiku for cost efficiency (~$2-4/month vs $15-25/month with Sonnet)
+    MODEL = "claude-3-haiku-20240307"
     MAX_TOKENS = 4096
 
     def __init__(self, db: AsyncSession, vector_store=None):
@@ -34,7 +36,7 @@ class AIEngine:
         self,
         message: str,
         user_id: UUID,
-        conversation_id: str | None = None,
+        conversation_id: Optional[str] = None,
         user_name: str = "User",
     ) -> str:
         """
@@ -99,7 +101,7 @@ class AIEngine:
         self,
         message: str,
         user_id: UUID,
-        conversation_id: str | None = None,
+        conversation_id: Optional[str] = None,
         user_name: str = "User",
     ) -> AsyncGenerator[str, None]:
         """
@@ -164,6 +166,6 @@ class AIEngine:
         if conversation_id in self.conversation_history:
             del self.conversation_history[conversation_id]
 
-    def get_conversation_history(self, conversation_id: str) -> list[dict]:
+    def get_conversation_history(self, conversation_id: str) -> List[dict]:
         """Get conversation history."""
         return self.conversation_history.get(conversation_id, [])

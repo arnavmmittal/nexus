@@ -1,6 +1,7 @@
+from __future__ import annotations
 """Memory API endpoints - Facts, Patterns, Search, Obsidian, and Claude Sync."""
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -29,7 +30,7 @@ class FactCreate(BaseModel):
     key: str = Field(..., min_length=1, max_length=255)
     value: str = Field(..., min_length=1)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    source: str | None = None
+    source: Optional[str] = None
 
 
 class FactResponse(BaseModel):
@@ -41,7 +42,7 @@ class FactResponse(BaseModel):
     key: str
     value: str
     confidence: float
-    source: str | None
+    source: Optional[str]
     created_at: Any
     updated_at: Any
 
@@ -83,7 +84,7 @@ class SearchResult(BaseModel):
 class ClaudeImportRequest(BaseModel):
     """Schema for Claude import request."""
 
-    directory: str | None = Field(
+    directory: Optional[str] = Field(
         default=None,
         description="Directory to import from (defaults to CLAUDE_HISTORY_PATH)",
     )
@@ -110,9 +111,9 @@ class ClaudeConversationResponse(BaseModel):
     source: str
     started_at: Any
     ended_at: Any
-    summary: str | None
-    extracted_facts: dict | None
-    extracted_skills: dict | None
+    summary: Optional[str]
+    extracted_facts: Optional[Dict]
+    extracted_skills: Optional[Dict]
 
     model_config = {"from_attributes": True}
 
@@ -138,7 +139,7 @@ class ObsidianSyncResponse(BaseModel):
     deleted: int
     errors: int
     chunks_created: int
-    error_message: str | None = None
+    error_message: Optional[str] = None
 
 
 class ObsidianStatusResponse(BaseModel):
@@ -150,10 +151,10 @@ class ObsidianStatusResponse(BaseModel):
     daily_notes: int = 0
     regular_notes: int = 0
     total_size_kb: float = 0
-    last_sync: str | None = None
+    last_sync: Optional[str] = None
     indexed_count: int = 0
     tracked_files: int = 0
-    recent_errors: list[str] = []
+    recent_errors: List[str] = []
 
 
 class ObsidianNoteResult(BaseModel):
@@ -164,7 +165,7 @@ class ObsidianNoteResult(BaseModel):
     score: float
     file_path: str
     file_name: str
-    tags: list[str]
+    tags: List[str]
     note_type: str
     modified_at: str
 
@@ -174,7 +175,7 @@ class ObsidianNoteResult(BaseModel):
 async def search_memory(
     query: str,
     limit: int = 10,
-) -> list[SearchResult]:
+) -> List[SearchResult]:
     """
     Search memory using semantic search.
 
@@ -196,10 +197,10 @@ async def search_memory(
     return [SearchResult(**r) for r in results]
 
 
-@router.get("/facts", response_model=list[FactResponse])
+@router.get("/facts", response_model=List[FactResponse])
 async def list_facts(
     db: Annotated[AsyncSession, Depends(get_db)],
-    category: str | None = None,
+    category: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
 ):
@@ -327,10 +328,10 @@ async def delete_fact(
     await db.delete(fact)
 
 
-@router.get("/patterns", response_model=list[PatternResponse])
+@router.get("/patterns", response_model=List[PatternResponse])
 async def list_patterns(
     db: Annotated[AsyncSession, Depends(get_db)],
-    domain: str | None = None,
+    domain: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
 ):
@@ -364,7 +365,7 @@ async def list_patterns(
 
 @router.post("/obsidian/sync", response_model=ObsidianSyncResponse)
 async def sync_obsidian_vault(
-    request: ObsidianSyncRequest | None = None,
+    request: Optional[ObsidianSyncRequest] = None,
 ):
     """
     Trigger manual sync of Obsidian vault.
@@ -459,8 +460,8 @@ async def get_obsidian_status():
 async def search_obsidian_notes(
     query: str = Query(..., min_length=1, description="Search query"),
     limit: int = Query(default=10, ge=1, le=50, description="Maximum results"),
-    tags: str | None = Query(default=None, description="Comma-separated tags to filter by"),
-) -> list[ObsidianNoteResult]:
+    tags: Optional[str] = Query(default=None, description="Comma-separated tags to filter by"),
+) -> List[ObsidianNoteResult]:
     """
     Search Obsidian notes semantically.
 
@@ -521,7 +522,7 @@ async def search_obsidian_notes(
 @router.get("/obsidian/recent")
 async def get_recent_obsidian_notes(
     limit: int = Query(default=10, ge=1, le=50, description="Maximum results"),
-) -> list[dict[str, Any]]:
+) -> List[dict[str, Any]]:
     """
     Get recently modified Obsidian notes.
 
@@ -688,11 +689,11 @@ async def import_claude_conversations(
     }
 
 
-@router.get("/claude/sessions", response_model=list[ClaudeSessionInfo])
+@router.get("/claude/sessions", response_model=List[ClaudeSessionInfo])
 async def list_claude_sessions(
-    project: str | None = None,
+    project: Optional[str] = None,
     limit: int = 50,
-) -> list[ClaudeSessionInfo]:
+) -> List[ClaudeSessionInfo]:
     """
     List available Claude Code sessions.
 
@@ -715,7 +716,7 @@ async def list_claude_sessions(
 async def search_claude_conversations(
     query: str,
     limit: int = 10,
-) -> list[SearchResult]:
+) -> List[SearchResult]:
     """
     Search across imported Claude Code conversations.
 
@@ -740,12 +741,12 @@ async def search_claude_conversations(
     return [SearchResult(**r) for r in results]
 
 
-@router.get("/claude/conversations", response_model=list[ClaudeConversationResponse])
+@router.get("/claude/conversations", response_model=List[ClaudeConversationResponse])
 async def list_claude_conversations(
     db: Annotated[AsyncSession, Depends(get_db)],
     limit: int = 50,
     offset: int = 0,
-) -> list[ClaudeConversationResponse]:
+) -> List[ClaudeConversationResponse]:
     """
     List imported Claude Code conversations.
 
@@ -804,7 +805,7 @@ async def get_claude_conversation(
 
 
 @router.get("/claude/projects")
-async def list_claude_projects() -> list[dict]:
+async def list_claude_projects() -> List[dict]:
     """
     Discover Claude Code projects.
 

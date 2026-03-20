@@ -5,7 +5,7 @@ using ElevenLabs for TTS and Claude for AI processing.
 """
 
 import logging
-from typing import Annotated
+from typing import Annotated, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
@@ -36,20 +36,20 @@ class SynthesizeRequest(BaseModel):
     """Request body for text-to-speech synthesis."""
 
     text: str = Field(..., min_length=1, max_length=5000, description="Text to synthesize")
-    voice_id: str | None = Field(None, description="Override voice ID")
-    stability: float | None = Field(None, ge=0.0, le=1.0, description="Voice stability")
-    similarity_boost: float | None = Field(
+    voice_id: Optional[str] = Field(None, description="Override voice ID")
+    stability: Optional[float] = Field(None, ge=0.0, le=1.0, description="Voice stability")
+    similarity_boost: Optional[float] = Field(
         None, ge=0.0, le=1.0, description="Voice similarity boost"
     )
-    style: float | None = Field(None, ge=0.0, le=1.0, description="Voice style")
+    style: Optional[float] = Field(None, ge=0.0, le=1.0, description="Voice style")
 
 
 class VoiceChatRequest(BaseModel):
     """Request body for voice-to-voice chat."""
 
     text: str = Field(..., min_length=1, max_length=10000, description="User message text")
-    conversation_id: str | None = Field(None, description="Conversation ID for continuity")
-    voice_id: str | None = Field(None, description="Override voice ID for response")
+    conversation_id: Optional[str] = Field(None, description="Conversation ID for continuity")
+    voice_id: Optional[str] = Field(None, description="Override voice ID for response")
 
 
 class VoiceChatResponse(BaseModel):
@@ -63,7 +63,7 @@ class TranscriptionResponse(BaseModel):
     """Response body for transcription."""
 
     text: str
-    language: str | None = None
+    language: Optional[str] = None
 
 
 @router.post("/synthesize")
@@ -249,7 +249,7 @@ async def voice_chat_text_response(
 @router.post("/transcribe", response_model=TranscriptionResponse)
 async def transcribe_audio(
     audio: UploadFile = File(..., description="Audio file to transcribe"),
-    language: str | None = None,
+    language: Optional[str] = None,
 ):
     """
     Transcribe audio to text using Whisper API.

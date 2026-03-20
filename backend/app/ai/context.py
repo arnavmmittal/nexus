@@ -1,6 +1,8 @@
+from __future__ import annotations
 """Context assembly for AI conversations."""
 
 from datetime import datetime, timedelta
+from typing import Optional, List, Dict
 from uuid import UUID
 
 from sqlalchemy import select
@@ -115,7 +117,7 @@ class ContextAssembler:
 
         return "\n".join(state_parts)
 
-    async def _get_user_identity(self, user_id: UUID) -> dict | None:
+    async def _get_user_identity(self, user_id: UUID) -> Optional[Dict]:
         """Get user identity information."""
         result = await self.db.execute(
             select(User).where(User.id == user_id)

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Chat API endpoints with WebSocket streaming."""
 
 import json

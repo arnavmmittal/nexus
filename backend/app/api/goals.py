@@ -1,7 +1,8 @@
+from __future__ import annotations
 """Goals API endpoints."""
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -25,11 +26,11 @@ router = APIRouter()
 DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
-@router.get("", response_model=list[GoalResponse])
+@router.get("", response_model=List[GoalResponse])
 async def list_goals(
     db: Annotated[AsyncSession, Depends(get_db)],
-    status_filter: str | None = None,
-    domain: str | None = None,
+    status_filter: Optional[str] = None,
+    domain: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
 ):
@@ -226,7 +227,7 @@ async def log_progress(
     return goal
 
 
-@router.get("/{goal_id}/progress", response_model=list[GoalProgressResponse])
+@router.get("/{goal_id}/progress", response_model=List[GoalProgressResponse])
 async def get_goal_progress(
     goal_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],

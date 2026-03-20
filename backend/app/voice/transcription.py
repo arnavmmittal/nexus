@@ -10,7 +10,7 @@ primarily supports Whisper API for server-side transcription.
 
 import logging
 from io import BytesIO
-from typing import BinaryIO
+from typing import BinaryIO, Optional, Union
 
 import httpx
 
@@ -32,7 +32,7 @@ class WhisperTranscriptionClient:
     BASE_URL = "https://api.openai.com/v1/audio/transcriptions"
     DEFAULT_MODEL = "whisper-1"
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: Optional[str] = None):
         """Initialize Whisper client.
 
         Args:
@@ -48,10 +48,10 @@ class WhisperTranscriptionClient:
 
     async def transcribe(
         self,
-        audio_data: bytes | BinaryIO,
+        audio_data: Union[bytes, BinaryIO],
         filename: str = "audio.webm",
-        language: str | None = None,
-        prompt: str | None = None,
+        language: Optional[str] = None,
+        prompt: Optional[str] = None,
     ) -> str:
         """Transcribe audio to text using Whisper.
 
@@ -168,7 +168,7 @@ For better accuracy, use Whisper API (server-side) as a fallback.
 
 
 # Singleton instance
-_whisper_client: WhisperTranscriptionClient | None = None
+_whisper_client: Optional[WhisperTranscriptionClient] = None
 
 
 def get_whisper_client() -> WhisperTranscriptionClient:

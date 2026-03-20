@@ -1,7 +1,9 @@
 """Plaid integration models for storing tokens and account data."""
 
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Any
+from typing import Any, Dict, List, Optional, Optional, Dict
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, String, Text, func
@@ -44,8 +46,8 @@ class PlaidItem(Base):
     access_token: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Institution info (cached from Plaid)
-    institution_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    institution_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    institution_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    institution_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Connection status
     status: Mapped[str] = mapped_column(
@@ -53,13 +55,13 @@ class PlaidItem(Base):
     )  # active, error, pending_expiration
 
     # Last sync timestamps
-    last_accounts_sync: Mapped[datetime | None] = mapped_column(nullable=True)
-    last_transactions_sync: Mapped[datetime | None] = mapped_column(nullable=True)
-    last_investments_sync: Mapped[datetime | None] = mapped_column(nullable=True)
+    last_accounts_sync: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    last_transactions_sync: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    last_investments_sync: Mapped[Optional[datetime]] = mapped_column(nullable=True)
 
     # Error tracking
-    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Metadata
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
@@ -105,25 +107,25 @@ class PlaidAccount(Base):
 
     # Account info
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    official_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    mask: Mapped[str | None] = mapped_column(String(10), nullable=True)  # Last 4 digits
+    official_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    mask: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # Last 4 digits
 
     # Account type (depository, credit, loan, investment, etc.)
     type: Mapped[str] = mapped_column(String(50), nullable=False)
-    subtype: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    subtype: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     # Cached balances (updated on sync)
-    current_balance: Mapped[float | None] = mapped_column(nullable=True)
-    available_balance: Mapped[float | None] = mapped_column(nullable=True)
-    limit: Mapped[float | None] = mapped_column(nullable=True)  # For credit accounts
+    current_balance: Mapped[Optional[float]] = mapped_column(nullable=True)
+    available_balance: Mapped[Optional[float]] = mapped_column(nullable=True)
+    limit: Mapped[Optional[float]] = mapped_column(nullable=True)  # For credit accounts
     currency: Mapped[str] = mapped_column(String(10), default="USD")
 
     # User preferences
     include_in_net_worth: Mapped[bool] = mapped_column(default=True)
-    custom_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    custom_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Timestamps
-    balance_updated_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    balance_updated_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(), onupdate=func.now()
@@ -168,21 +170,21 @@ class PlaidTransaction(Base):
     # Transaction details
     date: Mapped[datetime] = mapped_column(nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(500), nullable=False)
-    merchant_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    merchant_name: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     amount: Mapped[float] = mapped_column(nullable=False)
     currency: Mapped[str] = mapped_column(String(10), default="USD")
 
     # Categories (from Plaid)
-    category: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    category_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    category: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    category_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     categories: Mapped[list[str]] = mapped_column(JSONType(), default=list)
 
     # Status
     pending: Mapped[bool] = mapped_column(default=False)
 
     # User customization
-    custom_category: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    custom_category: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     excluded_from_analysis: Mapped[bool] = mapped_column(default=False)
 
     # Metadata

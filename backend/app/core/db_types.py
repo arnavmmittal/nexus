@@ -1,7 +1,9 @@
 """Database-agnostic type definitions for SQLite and PostgreSQL support."""
 
+from __future__ import annotations
+
 import uuid
-from typing import Any
+from typing import Any, Optional, Union
 
 from sqlalchemy import JSON, String, TypeDecorator
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
@@ -24,7 +26,7 @@ class GUID(TypeDecorator):
         else:
             return dialect.type_descriptor(String(36))
 
-    def process_bind_param(self, value: uuid.UUID | str | None, dialect: Dialect) -> str | None:
+    def process_bind_param(self, value: Optional[Union[uuid.UUID, str]], dialect: Dialect) -> Optional[str]:
         if value is None:
             return None
         if dialect.name == "postgresql":
@@ -35,7 +37,7 @@ class GUID(TypeDecorator):
                 return str(value)
             return value
 
-    def process_result_value(self, value: str | uuid.UUID | None, dialect: Dialect) -> uuid.UUID | None:
+    def process_result_value(self, value: Optional[Union[str, uuid.UUID]], dialect: Dialect) -> Optional[uuid.UUID]:
         if value is None:
             return None
         if isinstance(value, uuid.UUID):

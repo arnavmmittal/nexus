@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Widget data API endpoints."""
 
 import logging

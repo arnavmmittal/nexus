@@ -1,7 +1,8 @@
+from __future__ import annotations
 """Skills API endpoints."""
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -24,10 +25,10 @@ router = APIRouter()
 DEFAULT_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
-@router.get("", response_model=list[SkillResponse])
+@router.get("", response_model=List[SkillResponse])
 async def list_skills(
     db: Annotated[AsyncSession, Depends(get_db)],
-    category: str | None = None,
+    category: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
 ):
@@ -190,7 +191,7 @@ async def log_xp(
     return skill
 
 
-@router.get("/{skill_id}/history", response_model=list[SkillXPLogResponse])
+@router.get("/{skill_id}/history", response_model=List[SkillXPLogResponse])
 async def get_skill_history(
     skill_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
