@@ -83,6 +83,30 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Context manager for getting a database session (for background tasks).
+
+    Usage:
+        async with get_db_session() as db:
+            # Use db session
+            ...
+    """
+    async with async_session_maker() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+
 async def init_db() -> None:
     """Initialize database tables."""
     async with engine.begin() as conn:

@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = ""  # Defaults to "Adam" in client if empty
 
+    # GitHub Integration
+    github_token: str = ""  # Personal access token for GitHub API
+
     # Supabase Configuration (optional - only needed if using Supabase)
     supabase_url: str = ""
     supabase_anon_key: str = ""
@@ -46,6 +49,11 @@ class Settings(BaseSettings):
 
     # Claude History
     claude_history_path: str = "~/.claude/projects"
+
+    # Google OAuth Configuration
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/api/integrations/google/callback"
 
     # Server Configuration
     host: str = "0.0.0.0"

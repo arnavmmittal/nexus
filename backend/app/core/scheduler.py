@@ -4,8 +4,10 @@ import asyncio
 import logging
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.core.config import settings
@@ -17,6 +19,7 @@ _scheduler: AsyncIOScheduler | None = None
 
 # Default user ID for automated tasks (will be replaced with multi-user support)
 DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001"
+DEFAULT_USER_UUID = UUID(DEFAULT_USER_ID)
 
 
 async def sync_obsidian_vault() -> dict[str, Any]:
@@ -55,6 +58,49 @@ async def sync_obsidian_vault() -> dict[str, Any]:
         return {"status": "error", "error": str(e)}
 
 
+async def sync_github_activity() -> dict[str, Any]:
+    """
+    Background task to sync GitHub activity and award XP.
+
+    This runs daily to track coding activity from GitHub and
+    award XP to the corresponding programming skills.
+    """
+    from app.core.database import get_db_session
+    from app.integrations.github import get_github_integration
+
+    logger.info("Starting scheduled GitHub activity sync...")
+    start_time = datetime.utcnow()
+
+    try:
+        github = get_github_integration()
+
+        if not github.is_configured():
+            logger.debug("GitHub not configured, skipping scheduled sync")
+            return {"status": "skipped", "reason": "not_configured"}
+
+        # Get a database session for the background task
+        async with get_db_session() as db:
+            result = await github.sync_activity(
+                db,
+                days=1,  # Only sync last day for daily job
+                user_id=DEFAULT_USER_UUID,
+            )
+
+        duration = (datetime.utcnow() - start_time).total_seconds()
+        logger.info(
+            f"GitHub sync completed in {duration:.2f}s: "
+            f"commits={result.get('commits_processed', 0)}, "
+            f"prs={result.get('prs_processed', 0)}, "
+            f"xp={result.get('total_xp', 0)}"
+        )
+
+        return {"status": "success", "duration_seconds": duration, **result}
+
+    except Exception as e:
+        logger.error(f"Scheduled GitHub sync failed: {e}", exc_info=True)
+        return {"status": "error", "error": str(e)}
+
+
 def get_scheduler() -> AsyncIOScheduler:
     """Get or create the scheduler instance."""
     global _scheduler
@@ -69,6 +115,7 @@ async def start_scheduler() -> None:
 
     Adds scheduled jobs for:
     - Obsidian vault sync every 5 minutes
+    - GitHub activity sync daily at 6 AM
     """
     scheduler = get_scheduler()
 
@@ -84,6 +131,16 @@ async def start_scheduler() -> None:
         name="Obsidian Vault Sync",
         replace_existing=True,
         max_instances=1,  # Prevent overlapping syncs
+    )
+
+    # Add GitHub sync job (daily at 6 AM)
+    scheduler.add_job(
+        sync_github_activity,
+        trigger=CronTrigger(hour=6, minute=0),
+        id="github_sync",
+        name="GitHub Activity Sync",
+        replace_existing=True,
+        max_instances=1,
     )
 
     # Start the scheduler

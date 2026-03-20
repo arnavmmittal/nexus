@@ -32,6 +32,9 @@ httpx>=0.26.0
 python-dateutil>=2.8.2
 uuid7>=0.1.0
 
+# GitHub Integration
+PyGithub>=2.1.1
+
 # Background tasks
 apscheduler>=3.10.4
 
