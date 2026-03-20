@@ -35,3 +35,12 @@ export {
   useHealthWidget,
   widgetKeys,
 } from './useWidgets';
+
+// Integration hooks
+export {
+  useIntegrationsStatus,
+  useGoogleAuth,
+  useGitHub,
+  usePlaidIntegration,
+  integrationKeys,
+} from './useIntegrations';
