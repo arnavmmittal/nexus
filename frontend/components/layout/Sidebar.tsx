@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Command,
   Bot,
+  Cpu,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -28,6 +29,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/', color: 'text-white' },
   { icon: Bot, label: 'Jarvis', href: '/jarvis', color: 'text-cyan-400' },
+  { icon: Cpu, label: 'Ultron', href: '/ultron', color: 'text-red-500' },
   { icon: Target, label: 'Goals', href: '/goals', color: 'text-purple-400' },
   { icon: Zap, label: 'Skills', href: '/skills', color: 'text-blue-400' },
   { icon: Wallet, label: 'Money', href: '/money', color: 'text-emerald-400' },
