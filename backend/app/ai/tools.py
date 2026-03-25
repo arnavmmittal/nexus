@@ -966,6 +966,34 @@ TOOLS = [
     },
 ]
 
+# Import and add vision tools
+try:
+    from app.ai.vision import VISION_TOOLS
+    TOOLS.extend(VISION_TOOLS)
+except ImportError:
+    pass  # Vision module not available
+
+# Import and add explanation tools for transparency
+try:
+    from app.ai.explanations import EXPLANATION_TOOLS
+    TOOLS.extend(EXPLANATION_TOOLS)
+except ImportError:
+    pass  # Explanations module not available
+
+# Import and add document analysis tools
+try:
+    from app.ai.documents import DOCUMENT_TOOLS
+    TOOLS.extend(DOCUMENT_TOOLS)
+except ImportError:
+    pass  # Documents module not available
+
+# Import and add predictive alerts tools
+try:
+    from app.ai.predictions import PREDICTION_TOOLS
+    TOOLS.extend(PREDICTION_TOOLS)
+except ImportError:
+    pass  # Predictions module not available
+
 
 class ToolExecutor:
     """Executes tools on behalf of the AI."""
@@ -985,6 +1013,28 @@ class ToolExecutor:
                     return await execute_integration_tool(tool_name, tool_input)
             except ImportError:
                 pass  # Integrations not available
+
+            # Check if this is an explanation tool (transparency and trust)
+            try:
+                from app.ai.explanations import is_explanation_tool, execute_explanation_tool
+                if is_explanation_tool(tool_name):
+                    result = await execute_explanation_tool(tool_name, tool_input, self.user_id)
+                    return json.dumps(result, default=str)
+            except ImportError:
+                pass  # Explanations module not available
+
+            # Check if this is a prediction tool (proactive intelligence)
+            try:
+                from app.ai.predictions import PREDICTION_TOOLS, PredictionToolExecutor
+                prediction_tool_names = {t["name"] for t in PREDICTION_TOOLS}
+                if tool_name in prediction_tool_names:
+                    executor = PredictionToolExecutor(
+                        db=self.db,
+                        user_id=self.user_id,
+                    )
+                    return await executor.execute(tool_name, tool_input)
+            except ImportError:
+                pass  # Predictions module not available
 
             # Otherwise, use built-in tools
             method = getattr(self, f"_tool_{tool_name}", None)
@@ -2519,3 +2569,359 @@ class ToolExecutor:
             return {"success": True, "message": msg}
         else:
             return {"success": True, "message": "Focus mode disabled"}
+
+    # ============ VISION TOOLS ============
+
+    async def _tool_analyze_image(
+        self,
+        prompt: str,
+        image_base64: Optional[str] = None,
+        image_url: Optional[str] = None,
+        media_type: str = "image/png",
+    ) -> Dict[str, Any]:
+        """Analyze any image using Claude's vision capabilities."""
+        try:
+            from app.ai.vision import get_vision_analyzer
+            analyzer = get_vision_analyzer()
+
+            if image_url:
+                # Analyze from URL
+                return await analyzer.analyze_image_url(image_url, prompt)
+            elif image_base64:
+                # Analyze from base64
+                return await analyzer.analyze_image(image_base64, prompt, media_type)
+            else:
+                return {
+                    "success": False,
+                    "error": "Either image_base64 or image_url is required"
+                }
+        except ImportError:
+            return {
+                "success": False,
+                "error": "Vision module not available"
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Image analysis failed: {str(e)}"}
+
+    async def _tool_analyze_screenshot(
+        self,
+        prompt: Optional[str] = None,
+        display: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Take and analyze a screenshot of the current screen."""
+        try:
+            from app.ai.vision import analyze_screenshot
+            return await analyze_screenshot(prompt=prompt, display=display)
+        except ImportError:
+            return {
+                "success": False,
+                "error": "Vision module not available"
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Screenshot analysis failed: {str(e)}"}
+
+    async def _tool_analyze_document(
+        self,
+        file_path: str,
+        document_type: str = "other",
+        extract_fields: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Analyze a document image and extract information."""
+        try:
+            from app.ai.vision import analyze_document
+            return await analyze_document(
+                file_path=file_path,
+                document_type=document_type,
+                extract_fields=extract_fields,
+            )
+        except ImportError:
+            return {
+                "success": False,
+                "error": "Vision module not available"
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Document analysis failed: {str(e)}"}
+
+    async def _tool_describe_screen(
+        self,
+        detail_level: str = "normal",
+        focus_area: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Describe what's currently visible on screen."""
+        try:
+            from app.ai.vision import describe_screen
+            return await describe_screen(
+                detail_level=detail_level,
+                focus_area=focus_area,
+            )
+        except ImportError:
+            return {
+                "success": False,
+                "error": "Vision module not available"
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Screen description failed: {str(e)}"}
+
+    async def _tool_compare_images(
+        self,
+        image1_base64: Optional[str] = None,
+        image2_base64: Optional[str] = None,
+        image1_path: Optional[str] = None,
+        image2_path: Optional[str] = None,
+        comparison_focus: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Compare two images and describe differences."""
+        try:
+            from app.ai.vision import get_vision_analyzer
+            from pathlib import Path
+
+            analyzer = get_vision_analyzer()
+
+            # Get image1 data
+            if image1_base64:
+                img1_data = image1_base64
+            elif image1_path:
+                path = Path(image1_path).expanduser().resolve()
+                if not path.exists():
+                    return {"success": False, "error": f"File not found: {image1_path}"}
+                with open(path, "rb") as f:
+                    img1_data = f.read()
+            else:
+                return {"success": False, "error": "image1_base64 or image1_path is required"}
+
+            # Get image2 data
+            if image2_base64:
+                img2_data = image2_base64
+            elif image2_path:
+                path = Path(image2_path).expanduser().resolve()
+                if not path.exists():
+                    return {"success": False, "error": f"File not found: {image2_path}"}
+                with open(path, "rb") as f:
+                    img2_data = f.read()
+            else:
+                return {"success": False, "error": "image2_base64 or image2_path is required"}
+
+            return await analyzer.compare_images(
+                image1_data=img1_data,
+                image2_data=img2_data,
+                comparison_focus=comparison_focus,
+            )
+        except ImportError:
+            return {
+                "success": False,
+                "error": "Vision module not available"
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Image comparison failed: {str(e)}"}
+
+    async def _tool_extract_text_from_image(
+        self,
+        image_base64: Optional[str] = None,
+        image_path: Optional[str] = None,
+        media_type: str = "image/png",
+        preserve_formatting: bool = False,
+    ) -> Dict[str, Any]:
+        """Extract all text from an image."""
+        try:
+            from app.ai.vision import get_vision_analyzer
+            from pathlib import Path
+
+            analyzer = get_vision_analyzer()
+
+            # Get image data
+            if image_base64:
+                img_data = image_base64
+            elif image_path:
+                path = Path(image_path).expanduser().resolve()
+                if not path.exists():
+                    return {"success": False, "error": f"File not found: {image_path}"}
+                with open(path, "rb") as f:
+                    img_data = f.read()
+                # Detect media type from extension
+                import mimetypes
+                detected_type, _ = mimetypes.guess_type(str(path))
+                if detected_type:
+                    media_type = detected_type
+            else:
+                return {"success": False, "error": "image_base64 or image_path is required"}
+
+            return await analyzer.extract_text(
+                image_data=img_data,
+                media_type=media_type,
+                preserve_formatting=preserve_formatting,
+            )
+        except ImportError:
+            return {
+                "success": False,
+                "error": "Vision module not available"
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Text extraction failed: {str(e)}"}
+
+    # ============ DOCUMENT ANALYSIS TOOLS ============
+
+    async def _tool_analyze_document_file(
+        self,
+        file_path: str,
+        document_type: str = "auto",
+        extract_tables: bool = True,
+    ) -> Dict[str, Any]:
+        """Analyze a document file (PDF, Excel, CSV, image, text)."""
+        try:
+            from app.ai.documents import get_document_analyzer
+
+            analyzer = get_document_analyzer()
+
+            # Analyze the document
+            analysis = await analyzer.analyze(
+                file_path=file_path,
+                extract_tables=extract_tables,
+            )
+
+            if not analysis.success:
+                return {"success": False, "error": analysis.error}
+
+            # Store facts from document in memory if significant
+            if analysis.text and len(analysis.text) > 100:
+                try:
+                    from app.ai.memory import get_long_term_memory, FactCategory
+
+                    memory = get_long_term_memory(
+                        db=self.db,
+                        vector_store=self.vector_store,
+                        user_id=self.user_id,
+                    )
+
+                    # Store as a document fact
+                    filename = analysis.metadata.filename if analysis.metadata else file_path
+                    await memory.store_fact(
+                        fact=f"Analyzed document: {filename}",
+                        category=FactCategory.CONTEXT,
+                        confidence=0.9,
+                    )
+                except Exception:
+                    pass  # Memory storage is optional
+
+            return {
+                "success": True,
+                "metadata": analysis.metadata.to_dict() if analysis.metadata else None,
+                "text_preview": analysis.text[:2000] if len(analysis.text) > 2000 else analysis.text,
+                "full_text_length": len(analysis.text),
+                "page_count": len(analysis.pages),
+                "table_count": len(analysis.tables),
+                "tables": [t.to_dict() for t in analysis.tables[:5]],  # Limit to first 5 tables
+            }
+
+        except ImportError:
+            return {
+                "success": False,
+                "error": "Documents module not available"
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Document analysis failed: {str(e)}"}
+
+    async def _tool_extract_from_document(
+        self,
+        file_path: str,
+        extraction_types: Optional[List[str]] = None,
+        custom_fields: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Extract specific data from a document."""
+        try:
+            from app.ai.documents import extract_from_document
+
+            # Default extraction types if not provided
+            if not extraction_types:
+                extraction_types = ["dates", "amounts", "names"]
+
+            result = await extract_from_document(
+                file_path=file_path,
+                extraction_types=extraction_types,
+                custom_fields=custom_fields,
+            )
+
+            return result
+
+        except ImportError:
+            return {
+                "success": False,
+                "error": "Documents module not available"
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Data extraction failed: {str(e)}"}
+
+    async def _tool_summarize_document_file(
+        self,
+        file_path: str,
+        max_length: int = 500,
+    ) -> Dict[str, Any]:
+        """Generate an executive summary of a document."""
+        try:
+            from app.ai.documents import summarize_document
+
+            result = await summarize_document(
+                file_path=file_path,
+                max_length=max_length,
+            )
+
+            return result
+
+        except ImportError:
+            return {
+                "success": False,
+                "error": "Documents module not available"
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Document summarization failed: {str(e)}"}
+
+    async def _tool_compare_document_versions(
+        self,
+        file_path_1: str,
+        file_path_2: str,
+        name_1: str = "Version 1",
+        name_2: str = "Version 2",
+    ) -> Dict[str, Any]:
+        """Compare two document versions."""
+        try:
+            from app.ai.documents import compare_documents
+
+            result = await compare_documents(
+                file_path_1=file_path_1,
+                file_path_2=file_path_2,
+                name_1=name_1,
+                name_2=name_2,
+            )
+
+            return result
+
+        except ImportError:
+            return {
+                "success": False,
+                "error": "Documents module not available"
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Document comparison failed: {str(e)}"}
+
+    async def _tool_search_in_document_file(
+        self,
+        file_path: str,
+        query: str,
+    ) -> Dict[str, Any]:
+        """Search for text or concepts in a document."""
+        try:
+            from app.ai.documents import search_in_document
+
+            result = await search_in_document(
+                file_path=file_path,
+                query=query,
+            )
+
+            return result
+
+        except ImportError:
+            return {
+                "success": False,
+                "error": "Documents module not available"
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Document search failed: {str(e)}"}

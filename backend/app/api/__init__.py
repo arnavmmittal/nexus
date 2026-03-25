@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api import chat, widgets, skills, goals, memory, integrations, costs, health, agents, ultron, mcp, autonomy
+from app.api import chat, widgets, skills, goals, memory, integrations, costs, health, agents, ultron, mcp, autonomy, shortcut, telegram, push
 from app.api.websocket_agents import router as websocket_agents_router
 from app.voice.router import router as voice_router
 
@@ -24,4 +24,7 @@ api_router.include_router(agents.router, prefix="/agents", tags=["agents"])
 api_router.include_router(ultron.router, prefix="/ultron", tags=["ultron"])
 api_router.include_router(mcp.router, tags=["mcp"])
 api_router.include_router(autonomy.router, prefix="/autonomy", tags=["autonomy"])
+api_router.include_router(shortcut.router, prefix="/shortcut", tags=["shortcut"])
+api_router.include_router(telegram.router, prefix="/v1/telegram", tags=["telegram"])
 api_router.include_router(websocket_agents_router, tags=["websocket"])
+api_router.include_router(push.router, prefix="/push", tags=["push"])

@@ -57,6 +57,23 @@ from app.integrations.filesystem import (
     write_file,
     get_common_directories,
 )
+from app.integrations.smart_home import (
+    list_smart_devices,
+    control_device,
+    get_device_state,
+    activate_scene,
+    list_scenes,
+    set_thermostat,
+    control_lights,
+    get_home_status,
+)
+from app.scheduler.tools import (
+    schedule_action,
+    list_scheduled_actions,
+    cancel_scheduled_action,
+    reschedule_action,
+    get_scheduled_action,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +129,23 @@ INTEGRATION_EXECUTORS = {
     "get_file_info": get_file_info,
     "write_file": write_file,
     "get_common_directories": get_common_directories,
+
+    # Smart Home tools
+    "list_smart_devices": list_smart_devices,
+    "control_device": control_device,
+    "get_device_state": get_device_state,
+    "activate_scene": activate_scene,
+    "list_scenes": list_scenes,
+    "set_thermostat": set_thermostat,
+    "control_lights": control_lights,
+    "get_home_status": get_home_status,
+
+    # Scheduler tools
+    "schedule_action": schedule_action,
+    "list_scheduled_actions": list_scheduled_actions,
+    "cancel_scheduled_action": cancel_scheduled_action,
+    "reschedule_action": reschedule_action,
+    "get_scheduled_action": get_scheduled_action,
 }
 
 

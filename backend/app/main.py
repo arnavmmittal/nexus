@@ -86,6 +86,26 @@ except ImportError:
     start_proactive_engine = None
     stop_proactive_engine = None
 
+# Event-driven architecture initialization
+try:
+    from app.events import (
+        initialize_events,
+        shutdown_events,
+        get_event_bus,
+        get_workflow_engine,
+        emit,
+        EventType,
+    )
+    EVENTS_AVAILABLE = True
+except ImportError:
+    EVENTS_AVAILABLE = False
+    initialize_events = None
+    shutdown_events = None
+    get_event_bus = None
+    get_workflow_engine = None
+    emit = None
+    EventType = None
+
 # Configure logging
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
@@ -187,12 +207,49 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as e:
             logger.warning(f"Proactive engine initialization failed: {e}")
 
+    # Initialize event-driven architecture (event bus + workflows)
+    if EVENTS_AVAILABLE and initialize_events:
+        try:
+            await initialize_events()
+            bus = get_event_bus()
+            engine = get_workflow_engine()
+            stats = bus.get_statistics()
+            logger.info(
+                f"Event system initialized: {stats['subscription_count']} subscriptions, "
+                f"{len(engine._workflows)} workflows registered"
+            )
+
+            # Emit system startup event
+            await emit(
+                EventType.SYSTEM_STARTUP,
+                data={
+                    "version": "0.1.0",
+                    "debug": settings.debug,
+                    "host": settings.host,
+                    "port": settings.port,
+                },
+                source="main",
+            )
+        except Exception as e:
+            logger.warning(f"Event system initialization failed: {e}")
+
     logger.info(f"Server running at http://{settings.host}:{settings.port}")
 
     yield
 
     # Shutdown
     logger.info("Shutting down Nexus backend...")
+
+    # Shutdown event system first (workflows may depend on other services)
+    if EVENTS_AVAILABLE and shutdown_events:
+        try:
+            # Emit shutdown event before closing
+            if emit and EventType:
+                await emit(EventType.SYSTEM_SHUTDOWN, source="main")
+            await shutdown_events()
+            logger.info("Event system shutdown complete")
+        except Exception as e:
+            logger.warning(f"Event system shutdown error: {e}")
 
     # Stop background monitor daemon
     if DAEMON_AVAILABLE and stop_background_monitor:

@@ -44,3 +44,13 @@ export {
   usePlaidIntegration,
   integrationKeys,
 } from './useIntegrations';
+
+// PWA hooks
+export {
+  usePWA,
+  useNotifications,
+  type PWAStatus,
+  type UsePWAReturn,
+  type NotificationPermission,
+  type UseNotificationsReturn,
+} from './pwa';

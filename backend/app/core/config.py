@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     plaid_secret: str = ""
     plaid_env: str = "sandbox"  # sandbox, development, or production
 
+    # Telegram Bot Configuration
+    telegram_bot_token: str = ""  # Bot token from @BotFather
+    telegram_webhook_url: str = ""  # URL for receiving webhook updates
+    telegram_webhook_secret: str = ""  # Secret token for webhook verification
+
     # Server Configuration
     host: str = "0.0.0.0"
     port: int = 8000

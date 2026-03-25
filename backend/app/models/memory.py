@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, Optional, Optional, Dict
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import UUID
 
 from sqlalchemy import Float, ForeignKey, String, Text, func
@@ -74,7 +74,11 @@ class Pattern(Base):
 
 
 class Conversation(Base):
-    """Conversation records for memory."""
+    """Conversation records for memory.
+
+    Stores conversation summaries and extracted information for
+    long-term memory across sessions.
+    """
 
     __tablename__ = "conversations"
 
@@ -87,11 +91,12 @@ class Conversation(Base):
         GUID(),
         ForeignKey("users.id"),
         nullable=False,
+        index=True,  # Index for faster user-based queries
     )
     source: Mapped[str] = mapped_column(
         String(50), nullable=False
     )  # 'nexus', 'claude_code', 'claude_web'
-    started_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(nullable=True, index=True)
     ended_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     extracted_facts: Mapped[Optional[Dict[str, Any]]] = mapped_column(
@@ -101,5 +106,40 @@ class Conversation(Base):
         JSONType(), nullable=True
     )
 
+    # Additional fields for long-term memory
+    title: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )  # Auto-generated title for the conversation
+    topics: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSONType(), nullable=True
+    )  # Main topics discussed
+    message_count: Mapped[Optional[int]] = mapped_column(
+        nullable=True
+    )  # Number of messages in conversation
+    importance_score: Mapped[Optional[float]] = mapped_column(
+        Float, nullable=True
+    )  # How important this conversation is (0-1)
+
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="conversations")
+
+    @property
+    def duration_seconds(self) -> Optional[float]:
+        """Get conversation duration in seconds."""
+        if self.started_at is None or self.ended_at is None:
+            return None
+        return (self.ended_at - self.started_at).total_seconds()
+
+    @property
+    def has_summary(self) -> bool:
+        """Check if conversation has a summary."""
+        return self.summary is not None and len(self.summary) > 0
+
+    @property
+    def fact_count(self) -> int:
+        """Get number of extracted facts."""
+        if self.extracted_facts is None:
+            return 0
+        if isinstance(self.extracted_facts, list):
+            return len(self.extracted_facts)
+        return 0

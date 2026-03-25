@@ -21,9 +21,14 @@ import {
   Bell,
   Shield,
   ChevronLeft,
+  Smartphone,
 } from 'lucide-react';
+import { NotificationSettings } from '@/components/pwa';
+import { usePWA } from '@/hooks/pwa';
 
 function GeneralPanel() {
+  const { isInstalled, isStandalone, install, isInstallable } = usePWA();
+
   return (
     <div className="space-y-6">
       <div>
@@ -80,7 +85,52 @@ function GeneralPanel() {
           </CardContent>
         </Card>
 
-        {/* Notifications Section */}
+        {/* PWA Install Section */}
+        {!isStandalone && (
+          <Card className="glass-panel border-white/10">
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5 border border-white/10">
+                  <Smartphone className="h-5 w-5 text-emerald-400" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-semibold">Install App</CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                    Add Nexus to your home screen for the best experience
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">
+                    {isInstalled ? 'App installed' : 'Install as app'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {isInstalled
+                      ? 'Nexus is ready on your home screen'
+                      : 'Works offline, fast launch, native feel'}
+                  </p>
+                </div>
+                {isInstallable && !isInstalled && (
+                  <Button
+                    size="sm"
+                    onClick={install}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-black"
+                  >
+                    Install
+                  </Button>
+                )}
+                {isInstalled && (
+                  <span className="text-xs text-emerald-500 font-medium">Installed</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Push Notifications Section */}
         <Card className="glass-panel border-white/10">
           <CardHeader className="pb-4">
             <div className="flex items-center gap-3">
@@ -88,9 +138,29 @@ function GeneralPanel() {
                 <Bell className="h-5 w-5 text-orange-400" />
               </div>
               <div>
-                <CardTitle className="text-base font-semibold">Notifications</CardTitle>
+                <CardTitle className="text-base font-semibold">Push Notifications</CardTitle>
                 <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                  Control how you receive notifications
+                  Get alerts from Jarvis even when the app is closed
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <NotificationSettings showTestButton />
+          </CardContent>
+        </Card>
+
+        {/* Other Notifications Section */}
+        <Card className="glass-panel border-white/10">
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5 border border-white/10">
+                <Bell className="h-5 w-5 text-blue-400" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-semibold">Notification Preferences</CardTitle>
+                <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                  Control what notifications you receive
                 </CardDescription>
               </div>
             </div>

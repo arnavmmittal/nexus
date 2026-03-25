@@ -8,6 +8,7 @@ This module provides integrations with external services:
 - Email tools (Gmail, Outlook)
 - Browser automation
 - Slack
+- Smart Home (Apple HomeKit)
 """
 
 # Existing OAuth integrations
@@ -26,6 +27,7 @@ from app.integrations.slack_tools import SLACK_TOOLS
 from app.integrations.github_tools import GITHUB_TOOLS
 from app.integrations.job_intelligence import JOB_INTELLIGENCE_TOOLS
 from app.integrations.filesystem import FILESYSTEM_TOOLS
+from app.integrations.smart_home import SMART_HOME_TOOLS
 
 # All integration tools combined for AI agents
 ALL_INTEGRATION_TOOLS = (
@@ -35,7 +37,8 @@ ALL_INTEGRATION_TOOLS = (
     SLACK_TOOLS +
     GITHUB_TOOLS +
     JOB_INTELLIGENCE_TOOLS +
-    FILESYSTEM_TOOLS
+    FILESYSTEM_TOOLS +
+    SMART_HOME_TOOLS
 )
 
 __all__ = [
@@ -53,4 +56,5 @@ __all__ = [
     "SLACK_TOOLS",
     "GITHUB_TOOLS",
     "FILESYSTEM_TOOLS",
+    "SMART_HOME_TOOLS",
 ]

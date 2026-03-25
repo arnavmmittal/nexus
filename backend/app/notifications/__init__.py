@@ -19,7 +19,14 @@ from app.notifications.push import (
     setup_monitor_notifications,
 )
 
+from app.notifications.web_push import (
+    PushSubscription,
+    WebPushManager,
+    get_web_push_manager,
+)
+
 __all__ = [
+    # Core notifications
     "Notification",
     "NotificationChannel",
     "NotificationPriority",
@@ -27,4 +34,8 @@ __all__ = [
     "get_notification_manager",
     "notify",
     "setup_monitor_notifications",
+    # Web push
+    "PushSubscription",
+    "WebPushManager",
+    "get_web_push_manager",
 ]

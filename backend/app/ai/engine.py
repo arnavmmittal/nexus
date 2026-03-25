@@ -28,7 +28,16 @@ from app.core.config import settings
 # Import cost optimization modules
 from app.ai.cache import get_tool_cache, get_response_cache, CACHEABLE_TOOLS
 from app.ai.summarization import maybe_summarize, estimate_conversation_tokens
-from app.ai.model_router import get_model_router, select_model_for_query, ModelTier
+from app.ai.routing import (
+    get_router,
+    get_middleware,
+    route_query,
+    ModelTier,
+    ModelRouter,
+    RouterMiddleware,
+    RoutingDecision,
+    configure_ultron_override,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +100,24 @@ except ImportError:
     USER_PROFILE_ENABLED = False
     get_user_profile = None
 
+# Import long-term memory for persistent context
+try:
+    from app.ai.memory import get_long_term_memory, LongTermMemory
+    LONG_TERM_MEMORY_ENABLED = True
+except ImportError:
+    LONG_TERM_MEMORY_ENABLED = False
+    get_long_term_memory = None
+    LongTermMemory = None
+
+# Import vision module for image/screenshot analysis
+try:
+    from app.ai.vision import VISION_TOOLS, VisionAnalyzer
+    VISION_ENABLED = True
+except ImportError:
+    VISION_ENABLED = False
+    VISION_TOOLS = []
+    VisionAnalyzer = None
+
 
 class AIEngine:
     """AI Engine for processing chat messages with Claude and executing tools.
@@ -141,13 +168,18 @@ class AIEngine:
         # Cost optimization components
         self._tool_cache = get_tool_cache() if self.ENABLE_CACHING else None
         self._response_cache = get_response_cache() if self.ENABLE_CACHING else None
-        self._model_router = get_model_router() if self.ENABLE_MODEL_ROUTING else None
+        self._model_router = get_router() if self.ENABLE_MODEL_ROUTING else None
+        self._router_middleware = get_middleware() if self.ENABLE_MODEL_ROUTING else None
         self._optimization_stats = {
             "cache_hits": 0,
             "cache_misses": 0,
             "tokens_saved_by_summarization": 0,
             "model_downgrades": 0,
         }
+
+        # Long-term memory for persistent context across sessions
+        self._long_term_memory: Optional[Any] = None
+        self._memory_initialized = False
 
     async def get_agentic_executor(self, user_id: UUID):
         """Get the agentic executor for this user."""
@@ -234,6 +266,11 @@ class AIEngine:
         if INTEGRATIONS_ENABLED:
             all_tools.extend(ALL_INTEGRATION_TOOLS)
             logger.debug(f"Added {len(ALL_INTEGRATION_TOOLS)} integration tools")
+
+        # Add vision tools for image/screenshot analysis
+        if VISION_ENABLED:
+            # Vision tools are already in TOOLS via tools.py import, but log for visibility
+            logger.debug(f"Vision tools enabled ({len(VISION_TOOLS)} tools)")
 
         # Add MCP tools when available
         if MCP_ENABLED and self._mcp_initialized:
@@ -338,7 +375,7 @@ class AIEngine:
             self._optimization_stats["cache_misses"] += 1
 
         # Assemble context and current state IN PARALLEL
-        # Also fetch learned context and user profile in parallel
+        # Also fetch learned context, user profile, and long-term memory in parallel
         async def get_learned():
             if LEARNING_ENABLED:
                 try:
@@ -357,20 +394,68 @@ class AIEngine:
                     logger.warning(f"Failed to get user profile context: {e}")
             return ""
 
+        async def get_memory_context():
+            """Load relevant memories for the current query."""
+            if LONG_TERM_MEMORY_ENABLED:
+                try:
+                    # Initialize memory if needed
+                    if not self._memory_initialized:
+                        self._long_term_memory = get_long_term_memory(
+                            db=self.db,
+                            vector_store=self.vector_store,
+                            user_id=user_id,
+                        )
+                        self._memory_initialized = True
+
+                    if self._long_term_memory:
+                        # Get relevant memories for this query
+                        relevant = await self._long_term_memory.recall_relevant(
+                            query=message,
+                            limit=3,
+                            min_score=0.3,
+                        )
+
+                        if relevant:
+                            memory_lines = ["## Relevant Past Discussions\n"]
+                            for mem in relevant:
+                                content = mem.get("content", "")[:200]
+                                mem_type = mem.get("type", "memory")
+                                memory_lines.append(f"- [{mem_type}] {content}...")
+
+                            # Also add general memory context
+                            general_ctx = self._long_term_memory.get_context_for_prompt(max_facts=5)
+                            if general_ctx:
+                                memory_lines.append(f"\n{general_ctx}")
+
+                            return "\n".join(memory_lines)
+
+                        # Return just the general context if no relevant memories
+                        return self._long_term_memory.get_context_for_prompt(max_facts=5)
+
+                except Exception as e:
+                    logger.warning(f"Failed to get memory context: {e}")
+            return ""
+
         # Run all context assembly in parallel - this is a KEY optimization
-        context, current_state, learned_context, user_profile_context = await asyncio.gather(
+        context, current_state, learned_context, user_profile_context, memory_context = await asyncio.gather(
             self.context_assembler.assemble_context(message, user_id, conversation_id=conversation_id),
             self.context_assembler.get_current_state(user_id),
             get_learned(),
             get_user_profile_ctx(),
+            get_memory_context(),
         )
 
-        # Build system prompt with learned knowledge
+        # Combine learned context with memory context
+        combined_learned = learned_context
+        if memory_context:
+            combined_learned = f"{learned_context}\n\n{memory_context}" if learned_context else memory_context
+
+        # Build system prompt with learned knowledge and memory context
         system_prompt = get_system_prompt(
             user_name=user_name,
             assembled_context=context,
             current_state=current_state,
-            learned_context=learned_context,
+            learned_context=combined_learned,
             user_profile_context=user_profile_context,
         )
 
@@ -407,17 +492,23 @@ class AIEngine:
                 self._optimization_stats["tokens_saved_by_summarization"] += tokens_saved
                 logger.info(f"Summarization saved {tokens_saved} tokens")
 
-        # Select model based on query complexity
+        # Select model based on query complexity using intelligent routing
         model_to_use = self.MODEL
+        routing_decision = None
         if self.ENABLE_MODEL_ROUTING and self._model_router:
-            model_config, reason = self._model_router.select_model(
+            routing_decision = self._model_router.route(
                 query=message,
                 conversation_history=messages,
-                required_tools=None,
+                context={"user_id": str(user_id)},
+                agent_id=self._active_agent_id,
             )
-            model_to_use = model_config.model_id
+            model_to_use = routing_decision.model.model_id
             if model_to_use != self.MODEL:
-                logger.debug(f"Model routing: {reason}")
+                logger.debug(
+                    f"Model routing: tier={routing_decision.tier.value}, "
+                    f"category={routing_decision.classification.category.value}, "
+                    f"confidence={routing_decision.classification.confidence:.2f}"
+                )
 
         # Initialize tool executor
         tool_executor = ToolExecutor(self.db, user_id, self.vector_store)
@@ -627,6 +718,7 @@ class AIEngine:
             stats["response_cache"] = self._response_cache.stats
         if self._model_router:
             stats["model_routing"] = self._model_router.usage_stats
+            stats["routing_by_category"] = self._model_router.get_cost_by_category()
 
         return stats
 
@@ -679,20 +771,64 @@ class AIEngine:
                     logger.warning(f"Failed to get user profile context (stream): {e}")
             return ""
 
+        async def get_memory_context_stream():
+            """Load relevant memories for the current query (streaming)."""
+            if LONG_TERM_MEMORY_ENABLED:
+                try:
+                    if not self._memory_initialized:
+                        self._long_term_memory = get_long_term_memory(
+                            db=self.db,
+                            vector_store=self.vector_store,
+                            user_id=user_id,
+                        )
+                        self._memory_initialized = True
+
+                    if self._long_term_memory:
+                        relevant = await self._long_term_memory.recall_relevant(
+                            query=message,
+                            limit=3,
+                            min_score=0.3,
+                        )
+
+                        if relevant:
+                            memory_lines = ["## Relevant Past Discussions\n"]
+                            for mem in relevant:
+                                content = mem.get("content", "")[:200]
+                                mem_type = mem.get("type", "memory")
+                                memory_lines.append(f"- [{mem_type}] {content}...")
+
+                            general_ctx = self._long_term_memory.get_context_for_prompt(max_facts=5)
+                            if general_ctx:
+                                memory_lines.append(f"\n{general_ctx}")
+
+                            return "\n".join(memory_lines)
+
+                        return self._long_term_memory.get_context_for_prompt(max_facts=5)
+
+                except Exception as e:
+                    logger.warning(f"Failed to get memory context (stream): {e}")
+            return ""
+
         # Run all context assembly in parallel
-        context, current_state, learned_context, user_profile_context = await asyncio.gather(
+        context, current_state, learned_context, user_profile_context, memory_context = await asyncio.gather(
             self.context_assembler.assemble_context(message, user_id, conversation_id=conversation_id),
             self.context_assembler.get_current_state(user_id),
             get_learned_stream(),
             get_user_profile_ctx_stream(),
+            get_memory_context_stream(),
         )
 
-        # Build system prompt with learned knowledge
+        # Combine learned context with memory context
+        combined_learned = learned_context
+        if memory_context:
+            combined_learned = f"{learned_context}\n\n{memory_context}" if learned_context else memory_context
+
+        # Build system prompt with learned knowledge and memory context
         system_prompt = get_system_prompt(
             user_name=user_name,
             assembled_context=context,
             current_state=current_state,
-            learned_context=learned_context,
+            learned_context=combined_learned,
             user_profile_context=user_profile_context,
         )
 
@@ -728,14 +864,16 @@ class AIEngine:
                     original_tokens - new_tokens
                 )
 
-        # Select model based on query complexity
+        # Select model based on query complexity using intelligent routing
         model_to_use = self.MODEL
         if self.ENABLE_MODEL_ROUTING and self._model_router:
-            model_config, _ = self._model_router.select_model(
+            routing_decision = self._model_router.route(
                 query=message,
                 conversation_history=messages,
+                agent_id=self._active_agent_id,
             )
-            model_to_use = model_config.model_id
+            model_to_use = routing_decision.model.model_id
+            logger.debug(f"Stream routing: tier={routing_decision.tier.value}")
 
         # Initialize tool executor
         tool_executor = ToolExecutor(self.db, user_id, self.vector_store)
@@ -814,6 +952,140 @@ class AIEngine:
     def get_conversation_history(self, conversation_id: str) -> List[Dict]:
         """Get conversation history."""
         return self.conversation_history.get(conversation_id, [])
+
+    async def end_conversation(
+        self,
+        conversation_id: str,
+        user_id: UUID,
+    ) -> Dict[str, Any]:
+        """End a conversation and save to long-term memory.
+
+        This should be called when a conversation session ends (e.g., user
+        closes chat, timeout, explicit end). It generates a summary,
+        extracts key facts, and stores everything for future reference.
+
+        Args:
+            conversation_id: The conversation ID
+            user_id: User ID
+
+        Returns:
+            Dict with summary and extracted facts count
+        """
+        messages = self.conversation_history.get(conversation_id, [])
+
+        if not messages:
+            return {"summary": "", "facts_count": 0, "status": "no_messages"}
+
+        result = {
+            "conversation_id": conversation_id,
+            "message_count": len(messages),
+            "summary": "",
+            "facts_count": 0,
+            "status": "success",
+        }
+
+        # Save to long-term memory if enabled
+        if LONG_TERM_MEMORY_ENABLED and self._long_term_memory:
+            try:
+                summary, facts = await self._long_term_memory.end_conversation(
+                    conversation_id=conversation_id,
+                    messages=messages,
+                )
+                result["summary"] = summary
+                result["facts_count"] = len(facts)
+                logger.info(
+                    f"Saved conversation {conversation_id} to long-term memory: "
+                    f"{len(summary)} char summary, {len(facts)} facts"
+                )
+            except Exception as e:
+                logger.error(f"Failed to save conversation to long-term memory: {e}")
+                result["status"] = "memory_error"
+                result["error"] = str(e)
+
+        # Update database conversation record
+        if CONVERSATION_PERSISTENCE_ENABLED and self.db:
+            try:
+                conv_store = ConversationStore(self.db, user_id)
+                if result["summary"]:
+                    await conv_store.set_conversation_summary(
+                        conversation_id,
+                        result["summary"]
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to update conversation summary in DB: {e}")
+
+        return result
+
+    async def recall_memory(
+        self,
+        query: str,
+        user_id: UUID,
+        limit: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """Recall relevant memories for a query.
+
+        This is the "remember when we discussed X?" functionality.
+
+        Args:
+            query: The query to search for
+            user_id: User ID
+            limit: Maximum results
+
+        Returns:
+            List of relevant memories
+        """
+        if not LONG_TERM_MEMORY_ENABLED:
+            return []
+
+        # Initialize memory if needed
+        if not self._memory_initialized:
+            self._long_term_memory = get_long_term_memory(
+                db=self.db,
+                vector_store=self.vector_store,
+                user_id=user_id,
+            )
+            self._memory_initialized = True
+
+        if not self._long_term_memory:
+            return []
+
+        try:
+            return await self._long_term_memory.recall_relevant(
+                query=query,
+                limit=limit,
+            )
+        except Exception as e:
+            logger.error(f"Memory recall failed: {e}")
+            return []
+
+    async def get_memory_stats(self, user_id: UUID) -> Dict[str, Any]:
+        """Get statistics about stored memories.
+
+        Args:
+            user_id: User ID
+
+        Returns:
+            Dict with memory statistics
+        """
+        stats = {
+            "enabled": LONG_TERM_MEMORY_ENABLED,
+            "initialized": self._memory_initialized,
+            "conversations_cached": 0,
+            "facts_cached": 0,
+        }
+
+        if LONG_TERM_MEMORY_ENABLED and self._long_term_memory:
+            stats["conversations_cached"] = len(self._long_term_memory._memory_cache)
+            stats["facts_cached"] = len(self._long_term_memory._fact_cache)
+
+            # Get recent conversation history
+            try:
+                recent = await self._long_term_memory.get_conversation_history(days=30)
+                stats["conversations_last_30_days"] = len(recent)
+            except Exception:
+                stats["conversations_last_30_days"] = 0
+
+        return stats
 
     # ========== Multi-Agent Support ==========
 

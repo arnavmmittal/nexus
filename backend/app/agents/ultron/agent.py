@@ -3,6 +3,9 @@
 This module provides the UltronAgent class, an autonomous AI agent that
 proactively identifies problems, executes multi-step plans, and optimizes
 workflows without requiring constant user confirmation.
+
+Ultron uses intelligent model routing and may override to POWERFUL tier
+for critical autonomous decisions that require complex reasoning.
 """
 
 from __future__ import annotations
@@ -25,6 +28,22 @@ from .persona import (
 from .executor import UltronExecutor, Action, AuditEntry
 from .planner import UltronPlanner, Plan
 from .monitor import UltronMonitor, Alert, AlertSeverity, MonitoredTask
+
+# Import intelligent routing system
+try:
+    from app.ai.routing import (
+        get_router,
+        ModelTier,
+        RoutingDecision,
+        configure_ultron_override,
+    )
+    ROUTING_ENABLED = True
+except ImportError:
+    ROUTING_ENABLED = False
+    get_router = None
+    ModelTier = None
+    RoutingDecision = None
+    configure_ultron_override = None
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +146,65 @@ class UltronAgent(BaseAgent):
         self._running_tasks: Dict[str, asyncio.Task] = {}
         self._action_history: List[Dict[str, Any]] = []
 
+        # Configure routing for autonomous decisions
+        # Ultron can override to POWERFUL tier for critical tasks
+        self._routing_configured = False
+        if ROUTING_ENABLED:
+            self._configure_routing()
+
         logger.info(f"UltronAgent initialized with autonomy_level={config.autonomy_level}")
+
+    def _configure_routing(self) -> None:
+        """Configure intelligent routing for Ultron.
+
+        Ultron uses POWERFUL tier for critical autonomous decisions
+        that require complex reasoning and planning.
+        """
+        if not ROUTING_ENABLED:
+            return
+
+        try:
+            router = get_router()
+            # Register Ultron to prefer POWERFUL tier for autonomous actions
+            # This ensures critical decisions get the best model
+            router.set_agent_override("ultron", ModelTier.POWERFUL)
+            self._routing_configured = True
+            logger.info("Ultron routing configured: POWERFUL tier for autonomous decisions")
+        except Exception as e:
+            logger.warning(f"Failed to configure Ultron routing: {e}")
+
+    def get_model_for_task(
+        self,
+        task_type: str,
+        is_critical: bool = False,
+        is_autonomous: bool = True,
+    ) -> str:
+        """Get the appropriate model for a task.
+
+        Args:
+            task_type: Type of task being performed
+            is_critical: Whether this is a critical decision
+            is_autonomous: Whether this is an autonomous action
+
+        Returns:
+            Model ID to use
+        """
+        if not ROUTING_ENABLED:
+            return "claude-sonnet-4-20250514"  # Default fallback
+
+        router = get_router()
+
+        # For critical or autonomous decisions, use POWERFUL tier
+        if is_critical or (is_autonomous and self.autonomy_level > 0.5):
+            return router.get_model_for_tier(ModelTier.POWERFUL).model_id
+
+        # For routine tasks, use routing
+        decision = router.route(
+            query=f"Task type: {task_type}",
+            agent_id="ultron",
+            context={"is_critical": is_critical, "is_autonomous": is_autonomous},
+        )
+        return decision.model.model_id
 
     async def process_message(
         self,

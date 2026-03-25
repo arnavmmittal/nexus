@@ -391,6 +391,50 @@ class ApiClient {
       params: { query },
     });
   }
+
+  // ============ Push Notification endpoints ============
+  async getVAPIDPublicKey(): Promise<{ publicKey: string | null; configured: boolean }> {
+    return this.request('/api/push/vapid-public-key');
+  }
+
+  async getPushStatus(): Promise<{ configured: boolean; subscriptionCount: number }> {
+    return this.request('/api/push/status');
+  }
+
+  async subscribePush(subscription: PushSubscriptionJSON): Promise<{ status: string; endpoint: string }> {
+    return this.request('/api/push/subscribe', {
+      method: 'POST',
+      body: JSON.stringify(subscription),
+    });
+  }
+
+  async unsubscribePush(endpoint: string): Promise<{ status: string }> {
+    return this.request('/api/push/unsubscribe', {
+      method: 'DELETE',
+      body: JSON.stringify({ endpoint }),
+    });
+  }
+
+  async sendTestPush(): Promise<{ success: number; failed: number; error?: string }> {
+    return this.request('/api/push/test', {
+      method: 'POST',
+    });
+  }
+
+  async sendPushNotification(data: {
+    title: string;
+    body: string;
+    icon?: string;
+    tag?: string;
+    data?: Record<string, unknown>;
+    actions?: Array<{ action: string; title: string; icon?: string }>;
+    priority?: 'critical' | 'high' | 'normal' | 'low';
+  }): Promise<{ success: number; failed: number; error?: string }> {
+    return this.request('/api/push/send', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
 }
 
 export const api = new ApiClient(API_BASE_URL);

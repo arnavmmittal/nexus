@@ -50,8 +50,22 @@ plaid-python>=22.0.0
 # Finance / Stock Market Data
 yfinance>=0.2.36
 
+# Telegram Bot
+python-telegram-bot>=21.0
+
+# Web Push Notifications
+pywebpush>=1.14.0
+py-vapid>=1.9.0
+
 # Background tasks
 apscheduler>=3.10.4
+croniter>=2.0.1
+
+# Document processing
+pdfplumber>=0.10.3  # Better PDF extraction with table support
+PyPDF2>=3.0.1       # Fallback PDF reader
+openpyxl>=3.1.2     # Excel file support (.xlsx)
+python-magic>=0.4.27  # File type detection (optional but recommended)
 
 # Optional: Redis for caching (uncomment when needed)
 # redis>=5.0.1

@@ -309,3 +309,279 @@
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+
+/* ============ PWA Styles ============ */
+
+/* iOS Safe Area handling */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+/* Safe area padding utilities */
+.pt-safe {
+  padding-top: var(--sat);
+}
+
+.pb-safe {
+  padding-bottom: var(--sab);
+}
+
+.pl-safe {
+  padding-left: var(--sal);
+}
+
+.pr-safe {
+  padding-right: var(--sar);
+}
+
+.p-safe {
+  padding-top: var(--sat);
+  padding-bottom: var(--sab);
+  padding-left: var(--sal);
+  padding-right: var(--sar);
+}
+
+/* Standalone mode styles (when installed as PWA) */
+@media (display-mode: standalone) {
+  /* Add extra top padding for iOS status bar */
+  .standalone\:pt-safe {
+    padding-top: max(var(--sat), 20px);
+  }
+
+  /* Hide elements that shouldn't show in standalone mode */
+  .standalone\:hidden {
+    display: none !important;
+  }
+
+  /* Adjust bottom navigation for home indicator */
+  .standalone\:pb-safe {
+    padding-bottom: max(var(--sab), 20px);
+  }
+}
+
+/* iOS specific fixes */
+@supports (-webkit-touch-callout: none) {
+  /* Disable long-press callout */
+  body {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Re-enable text selection for inputs */
+  input,
+  textarea,
+  [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* Prevent bounce scrolling on iOS */
+  html {
+    position: fixed;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    height: 100%;
+    width: 100%;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Standalone mode iOS status bar background */
+@media (display-mode: standalone) {
+  @supports (-webkit-touch-callout: none) {
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--sat);
+      background: #0a0a0a;
+      z-index: 9999;
+    }
+  }
+}
+
+/* Pull to refresh visual feedback */
+.pull-indicator {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* Disable overscroll behavior on PWA */
+html, body {
+  overscroll-behavior-y: none;
+}
+
+/* Smooth transitions for PWA navigation */
+.pwa-page-transition {
+  animation: pageSlideIn 0.2s ease-out;
+}
+
+@keyframes pageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Offline indicator styling */
+.offline-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9997;
+  padding-top: var(--sat);
+}
+
+/* Install prompt animation */
+.install-prompt {
+  animation: slideInUp 0.3s ease-out;
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Update prompt styles */
+.update-prompt {
+  animation: fadeInScale 0.3s ease-out;
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Touch feedback */
+.touch-highlight {
+  -webkit-tap-highlight-color: rgba(16, 185, 129, 0.1);
+}
+
+.no-tap-highlight {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Skeleton loading for offline content */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #1f1f1f 0%,
+    #2a2a2a 50%,
+    #1f1f1f 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Splash screen background */
+.splash-screen {
+  background: #0a0a0a;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+/* Notification badge */
+.notification-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #ef4444;
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: notificationPop 0.2s ease-out;
+}
+
+@keyframes notificationPop {
+  0% {
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* App icon styling (for splash screens) */
+.app-icon {
+  width: 120px;
+  height: 120px;
+  border-radius: 28px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 20px 40px rgba(16, 185, 129, 0.3);
+}
+
+/* Quick action buttons (for standalone shortcuts) */
+.quick-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 16px;
+  background: #141414;
+  border: 1px solid #2a2a2a;
+  transition: all 0.2s ease;
+}
+
+.quick-action:active {
+  transform: scale(0.95);
+  background: #1f1f1f;
+}

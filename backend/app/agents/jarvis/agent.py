@@ -3,6 +3,10 @@
 This module defines the JarvisAgent class, which extends BaseAgent
 to implement Jarvis's specific behavior - a helpful, polite assistant
 that confirms before taking significant actions.
+
+Jarvis uses intelligent model routing to select the appropriate model
+tier based on query complexity, optimizing for cost while maintaining
+quality for complex tasks.
 """
 
 import logging
@@ -24,6 +28,16 @@ from app.agents.jarvis.persona import (
 from app.agents.jarvis.bridge import JarvisBridge
 from app.agents.jarvis.tools_integration import JarvisToolRegistry
 from app.core.config import settings
+
+# Import intelligent routing system
+try:
+    from app.ai.routing import get_router, ModelTier, RoutingDecision
+    ROUTING_ENABLED = True
+except ImportError:
+    ROUTING_ENABLED = False
+    get_router = None
+    ModelTier = None
+    RoutingDecision = None
 
 logger = logging.getLogger(__name__)
 
@@ -170,9 +184,27 @@ class JarvisAgent(BaseAgent):
             # Sanitize tools for Claude API
             sanitized_tools = [self._sanitize_tool(t) for t in tools]
 
-            # Call Claude
+            # Select model using intelligent routing
+            model_to_use = "claude-3-5-haiku-20241022"  # Default fallback
+            routing_decision = None
+
+            if ROUTING_ENABLED:
+                router = get_router()
+                routing_decision = router.route(
+                    query=message,
+                    conversation_history=self._conversation_history[-20:],
+                    context=context,
+                    agent_id="jarvis",
+                )
+                model_to_use = routing_decision.model.model_id
+                logger.debug(
+                    f"Jarvis routing: tier={routing_decision.tier.value}, "
+                    f"model={model_to_use}"
+                )
+
+            # Call Claude with routed model
             response = await self._client.messages.create(
-                model="claude-3-haiku-20240307",
+                model=model_to_use,
                 max_tokens=4096,
                 system=system_prompt,
                 messages=self._conversation_history[-20:],  # Last 20 messages
@@ -184,6 +216,7 @@ class JarvisAgent(BaseAgent):
                 response,
                 system_prompt,
                 sanitized_tools,
+                model=model_to_use,
             )
 
             # Add assistant response to history
@@ -192,12 +225,23 @@ class JarvisAgent(BaseAgent):
                 "content": final_response,
             })
 
-            return {
+            result = {
                 "response": final_response,
                 "status": "success",
                 "agent_id": self.agent_id,
                 "agent_name": self.name,
             }
+
+            # Add routing info if available
+            if routing_decision:
+                result["routing"] = {
+                    "tier": routing_decision.tier.value,
+                    "model": routing_decision.model.model_id,
+                    "category": routing_decision.classification.category.value,
+                    "confidence": routing_decision.classification.confidence,
+                }
+
+            return result
 
         except Exception as e:
             logger.error(f"Error processing message: {e}")
@@ -224,10 +268,25 @@ class JarvisAgent(BaseAgent):
         response: Any,
         system_prompt: str,
         tools: List[Dict],
+        model: Optional[str] = None,
     ) -> str:
-        """Process Claude's response, handling tool use."""
+        """Process Claude's response, handling tool use.
+
+        Args:
+            response: Claude API response
+            system_prompt: System prompt to use
+            tools: Available tools
+            model: Model ID to use (from routing)
+        """
         max_iterations = 10
         iteration = 0
+
+        # Get model from routing if not provided
+        model_to_use = model or "claude-3-5-haiku-20241022"
+        if ROUTING_ENABLED and not model:
+            router = get_router()
+            # Use BALANCED tier for tool processing (safe default)
+            model_to_use = router.get_model_for_tier(ModelTier.BALANCED).model_id
 
         while iteration < max_iterations:
             iteration += 1
@@ -279,9 +338,9 @@ class JarvisAgent(BaseAgent):
                     "content": tool_results,
                 })
 
-                # Continue conversation
+                # Continue conversation with the same model
                 response = await self._client.messages.create(
-                    model="claude-3-haiku-20240307",
+                    model=model_to_use,
                     max_tokens=4096,
                     system=system_prompt,
                     messages=self._conversation_history[-20:],

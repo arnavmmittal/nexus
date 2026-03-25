@@ -2,13 +2,19 @@
 
 Provides text-to-speech synthesis and voice-to-voice chat capabilities
 using ElevenLabs for TTS and Claude for AI processing.
+
+Supports two modes:
+1. Standard: Wait for full AI response, then stream TTS
+2. Streaming: Start TTS while AI is still generating text (lower latency)
 """
 
+import asyncio
 import logging
+import urllib.parse
 from typing import Annotated, List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +28,11 @@ from app.voice.elevenlabs import (
     get_elevenlabs_client,
 )
 from app.voice.transcription import get_whisper_client
+from app.voice.streaming import (
+    StreamingTTSProcessor,
+    StreamingTTSConfig,
+    get_streaming_tts_manager,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -64,6 +75,7 @@ class VoiceChatRequest(BaseModel):
     voice_id: Optional[str] = Field(None, description="Override voice ID for response")
     persona: Optional[str] = Field("jarvis", description="AI persona: 'jarvis' or 'ultron'")
     speed: Optional[float] = Field(1.0, ge=0.5, le=2.0, description="Speech speed multiplier")
+    streaming: Optional[bool] = Field(False, description="Use streaming TTS for lower latency")
 
 
 class VoiceChatResponse(BaseModel):
@@ -157,6 +169,9 @@ async def voice_chat(
     3. Streams the response to ElevenLabs for synthesis
     4. Returns audio stream
 
+    Set `streaming=true` in the request for lower latency by starting TTS
+    while Claude is still generating text.
+
     Args:
         request: Voice chat request with message text
         db: Database session
@@ -165,6 +180,10 @@ async def voice_chat(
     Returns:
         StreamingResponse with audio/mpeg content type
     """
+    # Use streaming endpoint if requested
+    if request.streaming:
+        return await voice_chat_streaming(request, db)
+
     try:
         # Initialize AI engine
         vector_store = get_vector_store()
@@ -173,7 +192,6 @@ async def voice_chat(
         # Get AI response with retry for overload
         logger.info(f"Voice chat request: '{request.text[:50]}...'")
 
-        import asyncio
         max_retries = 3
         response_text = None
 
@@ -227,8 +245,10 @@ async def voice_chat(
                 "Content-Disposition": "inline",
                 "Cache-Control": "no-cache",
                 # Include text response in header for frontend to display
-                "X-Text-Response": response_text[:500].replace("\n", " "),
+                # URL-encode to handle special characters safely
+                "X-Text-Response": urllib.parse.quote(response_text[:500].replace("\n", " ")),
                 "X-Conversation-Id": request.conversation_id or "new",
+                "X-Streaming-Mode": "false",
             },
         )
 
@@ -252,6 +272,137 @@ async def voice_chat(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to process voice chat: {error_msg}",
+        )
+
+
+@router.post("/chat/stream")
+async def voice_chat_streaming(
+    request: VoiceChatRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> StreamingResponse:
+    """
+    Streaming voice chat: start speaking while Claude is still generating.
+
+    This endpoint provides significantly lower perceived latency by:
+    1. Streaming text from Claude as it's generated
+    2. Buffering text until sentence boundaries
+    3. Sending complete sentences to ElevenLabs immediately
+    4. Yielding audio chunks as they arrive
+
+    The result is that the user hears the first words within ~1-2 seconds
+    instead of waiting 5-10+ seconds for the full response.
+
+    Args:
+        request: Voice chat request with message text
+        db: Database session
+
+    Returns:
+        StreamingResponse with audio/mpeg content type
+
+    Headers returned:
+        X-Streaming-Mode: "true"
+        X-Conversation-Id: conversation ID
+        X-Text-Response: URL-encoded full response (sent as trailer or partial)
+    """
+    try:
+        # Initialize AI engine
+        vector_store = get_vector_store()
+        engine = AIEngine(db, vector_store)
+
+        logger.info(f"Streaming voice chat request: '{request.text[:50]}...'")
+
+        # Select voice and settings based on persona
+        voice_id = request.voice_id or VOICE_IDS.get(request.persona, VOICE_IDS["jarvis"])
+        voice_settings_dict = VOICE_SETTINGS.get(request.persona, VOICE_SETTINGS["jarvis"])
+        voice_settings = VoiceSettings(
+            stability=voice_settings_dict["stability"],
+            similarity_boost=voice_settings_dict["similarity_boost"],
+            style=voice_settings_dict["style"],
+        )
+
+        # Configure streaming TTS
+        streaming_config = StreamingTTSConfig(
+            min_chunk_size=15,  # Minimum chars before sending to TTS
+            max_buffer_size=400,  # Max chars to buffer
+            flush_timeout=0.3,  # Timeout before flushing partial sentence
+        )
+
+        # Create streaming TTS processor
+        processor = StreamingTTSProcessor(
+            voice_id=voice_id,
+            voice_settings=voice_settings,
+            config=streaming_config,
+        )
+
+        # Track accumulated text for the response header
+        accumulated_text: List[str] = []
+
+        async def text_generator():
+            """Generate text from AI engine's streaming response."""
+            try:
+                async for chunk in engine.stream_chat(
+                    message=request.text,
+                    user_id=DEFAULT_USER_ID,
+                    conversation_id=request.conversation_id,
+                    user_name=DEFAULT_USER_NAME,
+                ):
+                    accumulated_text.append(chunk)
+                    yield chunk
+            except Exception as e:
+                logger.error(f"AI streaming error: {e}")
+                # Yield error message that will be spoken
+                yield f"I apologize, but I encountered an error: {str(e)}"
+
+        async def generate_audio():
+            """Generate audio from streaming text."""
+            try:
+                async for audio_chunk in processor.process_stream(text_generator()):
+                    yield audio_chunk
+            except Exception as e:
+                logger.error(f"TTS streaming error: {e}")
+                # Can't yield error audio here, just log
+
+            # Log final statistics
+            full_text = "".join(accumulated_text)
+            logger.info(
+                f"Streaming complete: {len(full_text)} chars, "
+                f"{processor.stats['sentences_processed']} sentences"
+            )
+
+        return StreamingResponse(
+            generate_audio(),
+            media_type="audio/mpeg",
+            headers={
+                "Content-Disposition": "inline",
+                "Cache-Control": "no-cache",
+                "X-Conversation-Id": request.conversation_id or "new",
+                "X-Streaming-Mode": "true",
+                # Note: X-Text-Response can't include the full text in streaming mode
+                # since headers are sent before the body. Client should use /chat/text
+                # endpoint separately if they need the full text.
+            },
+        )
+
+    except ValueError as e:
+        logger.error(f"Configuration error: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Streaming voice chat error: {e}")
+        error_msg = str(e)
+
+        # Handle Anthropic API overload (529)
+        if "overloaded" in error_msg.lower() or "529" in error_msg:
+            raise HTTPException(
+                status_code=503,
+                detail="AI service is temporarily busy. Please try again in a few seconds.",
+            )
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to process streaming voice chat: {error_msg}",
         )
 
 
