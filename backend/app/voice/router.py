@@ -32,14 +32,14 @@ DEFAULT_USER_NAME = "Arnav Mittal"
 
 # Voice IDs for different AI personalities
 VOICE_IDS = {
-    "jarvis": "JBFqnCBsd6RMkjVDRZzb",  # George - British, warm
-    "tars": "bIHbv24MWmeRgasZH58o",     # Will - Relaxed, soft American
+    "jarvis": "JBFqnCBsd6RMkjVDRZzb",  # George - British, warm, helpful
+    "ultron": "ErXwobaYiN019PkySvjV",   # Antoni - Confident, authoritative
 }
 
-# Voice settings for different personas (softer for TARS)
+# Voice settings for different personas
 VOICE_SETTINGS = {
-    "jarvis": {"stability": 0.7, "similarity_boost": 0.8, "style": 0.3},
-    "tars": {"stability": 0.4, "similarity_boost": 0.6, "style": 0.1},  # Softer, less enunciated
+    "jarvis": {"stability": 0.7, "similarity_boost": 0.8, "style": 0.3},  # Warm and helpful
+    "ultron": {"stability": 0.8, "similarity_boost": 0.9, "style": 0.5},  # Confident, direct
 }
 
 
@@ -62,7 +62,7 @@ class VoiceChatRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=10000, description="User message text")
     conversation_id: Optional[str] = Field(None, description="Conversation ID for continuity")
     voice_id: Optional[str] = Field(None, description="Override voice ID for response")
-    persona: Optional[str] = Field("jarvis", description="AI persona: 'jarvis' or 'tars'")
+    persona: Optional[str] = Field("jarvis", description="AI persona: 'jarvis' or 'ultron'")
     speed: Optional[float] = Field(1.0, ge=0.5, le=2.0, description="Speech speed multiplier")
 
 
@@ -170,15 +170,35 @@ async def voice_chat(
         vector_store = get_vector_store()
         engine = AIEngine(db, vector_store)
 
-        # Get AI response
+        # Get AI response with retry for overload
         logger.info(f"Voice chat request: '{request.text[:50]}...'")
 
-        response_text = await engine.chat(
-            message=request.text,
-            user_id=DEFAULT_USER_ID,
-            conversation_id=request.conversation_id,
-            user_name=DEFAULT_USER_NAME,
-        )
+        import asyncio
+        max_retries = 3
+        response_text = None
+
+        for attempt in range(max_retries):
+            try:
+                response_text = await engine.chat(
+                    message=request.text,
+                    user_id=DEFAULT_USER_ID,
+                    conversation_id=request.conversation_id,
+                    user_name=DEFAULT_USER_NAME,
+                )
+                break  # Success, exit retry loop
+            except Exception as e:
+                if "overloaded" in str(e).lower() or "529" in str(e):
+                    if attempt < max_retries - 1:
+                        wait_time = (attempt + 1) * 2  # 2s, 4s, 6s
+                        logger.warning(f"API overloaded, retrying in {wait_time}s (attempt {attempt + 1})")
+                        await asyncio.sleep(wait_time)
+                    else:
+                        raise  # Re-raise on final attempt
+                else:
+                    raise  # Re-raise non-overload errors immediately
+
+        if response_text is None:
+            raise Exception("Failed to get AI response after retries")
 
         logger.info(f"AI response: '{response_text[:50]}...'")
 
@@ -220,9 +240,18 @@ async def voice_chat(
         )
     except Exception as e:
         logger.error(f"Voice chat error: {e}")
+        error_msg = str(e)
+
+        # Handle Anthropic API overload (529)
+        if "overloaded" in error_msg.lower() or "529" in error_msg:
+            raise HTTPException(
+                status_code=503,
+                detail="AI service is temporarily busy. Please try again in a few seconds.",
+            )
+
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to process voice chat: {str(e)}",
+            detail=f"Failed to process voice chat: {error_msg}",
         )
 
 

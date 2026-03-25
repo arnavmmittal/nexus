@@ -5,6 +5,7 @@ This is the main entry point for the Nexus backend API.
 Run with: uvicorn app.main:app --reload
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -17,6 +18,73 @@ from app.api import api_router
 from app.core.config import settings
 from app.core.database import close_db, init_db
 from app.core.scheduler import start_scheduler, stop_scheduler
+
+# MCP server initialization
+try:
+    from app.mcp import start_mcp_registry, stop_mcp_registry
+    MCP_AVAILABLE = True
+except ImportError:
+    MCP_AVAILABLE = False
+    start_mcp_registry = None
+    stop_mcp_registry = None
+
+# Background daemon initialization
+try:
+    from app.daemon import (
+        start_background_monitor,
+        stop_background_monitor,
+        get_background_monitor,
+        get_auto_apply_pipeline,
+    )
+    DAEMON_AVAILABLE = True
+except ImportError:
+    DAEMON_AVAILABLE = False
+    start_background_monitor = None
+    stop_background_monitor = None
+    get_background_monitor = None
+    get_auto_apply_pipeline = None
+
+# Notification system initialization
+try:
+    from app.notifications import (
+        get_notification_manager,
+        setup_monitor_notifications,
+    )
+    NOTIFICATIONS_AVAILABLE = True
+except ImportError:
+    NOTIFICATIONS_AVAILABLE = False
+    get_notification_manager = None
+    setup_monitor_notifications = None
+
+# Agent collaboration hub initialization
+try:
+    from app.agents import (
+        get_collaboration_hub,
+        start_collaboration_hub,
+        initialize_agents,
+        INTEGRATION_AVAILABLE,
+        AGENTS_AVAILABLE,
+    )
+    COLLABORATION_AVAILABLE = INTEGRATION_AVAILABLE and AGENTS_AVAILABLE
+except ImportError:
+    COLLABORATION_AVAILABLE = False
+    get_collaboration_hub = None
+    start_collaboration_hub = None
+    initialize_agents = None
+
+# Proactive engine initialization
+try:
+    from app.agents.proactive import (
+        get_proactive_engine,
+        start_proactive_engine,
+        stop_proactive_engine,
+    )
+    PROACTIVE_AVAILABLE = True
+except ImportError:
+    PROACTIVE_AVAILABLE = False
+    get_proactive_engine = None
+    start_proactive_engine = None
+    stop_proactive_engine = None
 
 # Configure logging
 logging.basicConfig(
@@ -52,12 +120,96 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning(f"Background scheduler initialization failed: {e}")
 
+    # Initialize MCP servers
+    if MCP_AVAILABLE:
+        try:
+            registry = await start_mcp_registry()
+            status = registry.get_server_status()
+            logger.info(f"MCP servers initialized: {len(status)} servers connected")
+            for name, info in status.items():
+                logger.info(f"  - {name}: {info['tools_count']} tools available")
+        except Exception as e:
+            logger.warning(f"MCP initialization failed: {e}")
+
+    # Initialize background monitor daemon (Ultron's always-on system)
+    if DAEMON_AVAILABLE:
+        try:
+            from app.core.user_profile import get_user_profile
+            profile = get_user_profile()
+
+            if profile.autonomy.background_monitoring_enabled:
+                # Start monitor in background task
+                monitor = get_background_monitor()
+                asyncio.create_task(monitor.start())
+                logger.info("Background monitor daemon started")
+
+                # Set up notification integration
+                if NOTIFICATIONS_AVAILABLE and setup_monitor_notifications:
+                    setup_monitor_notifications()
+                    logger.info("Monitor notifications configured")
+            else:
+                logger.info("Background monitoring disabled in user settings")
+
+            # Start auto-apply pipeline if enabled
+            if profile.autonomy.auto_apply_jobs_enabled and get_auto_apply_pipeline:
+                pipeline = get_auto_apply_pipeline()
+                asyncio.create_task(pipeline.start())
+                logger.info("Auto-apply pipeline started")
+
+        except Exception as e:
+            logger.warning(f"Background daemon initialization failed: {e}")
+
+    # Initialize agent collaboration hub with Jarvis and Ultron agents
+    if COLLABORATION_AVAILABLE and initialize_agents:
+        try:
+            jarvis, ultron, hub = initialize_agents()
+            if jarvis and ultron:
+                logger.info("Jarvis and Ultron agents initialized and connected")
+                logger.info(f"  - Jarvis: User-facing assistant (autonomy: 0.3)")
+                logger.info(f"  - Ultron: Autonomous executor (autonomy: 0.7)")
+            else:
+                logger.warning("Agents not fully initialized - falling back to collaboration hub only")
+                hub = start_collaboration_hub()
+        except Exception as e:
+            logger.warning(f"Agent initialization failed: {e}")
+            # Fallback to basic hub
+            try:
+                hub = start_collaboration_hub()
+                logger.info("Agent collaboration hub started (basic mode)")
+            except Exception as e2:
+                logger.warning(f"Collaboration hub initialization also failed: {e2}")
+
+    # Initialize proactive suggestion engine
+    if PROACTIVE_AVAILABLE and start_proactive_engine:
+        try:
+            asyncio.create_task(start_proactive_engine())
+            logger.info("Proactive suggestion engine started")
+        except Exception as e:
+            logger.warning(f"Proactive engine initialization failed: {e}")
+
     logger.info(f"Server running at http://{settings.host}:{settings.port}")
 
     yield
 
     # Shutdown
     logger.info("Shutting down Nexus backend...")
+
+    # Stop background monitor daemon
+    if DAEMON_AVAILABLE and stop_background_monitor:
+        try:
+            await stop_background_monitor()
+            logger.info("Background monitor daemon stopped")
+        except Exception as e:
+            logger.warning(f"Background monitor shutdown error: {e}")
+
+    # Stop MCP servers
+    if MCP_AVAILABLE and stop_mcp_registry:
+        try:
+            await stop_mcp_registry()
+            logger.info("MCP servers disconnected")
+        except Exception as e:
+            logger.warning(f"MCP shutdown error: {e}")
+
     await stop_scheduler()
     logger.info("Background scheduler stopped")
     await close_db()

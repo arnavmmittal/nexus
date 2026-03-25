@@ -357,6 +357,10 @@ export function UltronFullScreen({ className }: UltronFullScreenProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [isHolding, setIsHolding] = useState(false);
 
+  // Track which transcript we've already processed to prevent double responses
+  const processedTranscriptRef = useRef<string | null>(null);
+  const isProcessingRef = useRef(false);
+
   // Keyboard handling for voice control
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -407,9 +411,22 @@ export function UltronFullScreen({ className }: UltronFullScreenProps) {
     };
   }, [isHolding, state, isMuted, voiceMode, startListening, stopListening, stopSpeaking]);
 
-  // Process transcript when listening stops
+  // Process transcript when listening stops (with guard against double processing)
   useEffect(() => {
-    if (state === 'thinking' && transcript) {
+    // Only process if:
+    // 1. State is 'thinking'
+    // 2. We have a transcript
+    // 3. We haven't already processed this exact transcript
+    // 4. We're not currently processing
+    if (
+      state === 'thinking' &&
+      transcript &&
+      transcript !== processedTranscriptRef.current &&
+      !isProcessingRef.current
+    ) {
+      isProcessingRef.current = true;
+      processedTranscriptRef.current = transcript;
+
       const processMessage = async () => {
         try {
           const response = await speakWithAI(transcript);
@@ -418,12 +435,21 @@ export function UltronFullScreen({ className }: UltronFullScreenProps) {
         } catch (err) {
           console.error('Voice chat error:', err);
           setError(err instanceof Error ? err.message : 'Failed to process');
+        } finally {
+          isProcessingRef.current = false;
         }
       };
 
       processMessage();
     }
   }, [state, transcript, speakWithAI]);
+
+  // Reset processed transcript when returning to idle
+  useEffect(() => {
+    if (state === 'idle') {
+      processedTranscriptRef.current = null;
+    }
+  }, [state]);
 
   // Mic button handlers
   const handleMicDown = useCallback(() => {

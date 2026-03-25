@@ -978,6 +978,15 @@ class ToolExecutor:
     async def execute(self, tool_name: str, tool_input: Dict[str, Any]) -> str:
         """Execute a tool and return the result as a string."""
         try:
+            # Check if this is an integration tool (jobs, email, browser, slack, github)
+            try:
+                from app.integrations.executor import is_integration_tool, execute_integration_tool
+                if is_integration_tool(tool_name):
+                    return await execute_integration_tool(tool_name, tool_input)
+            except ImportError:
+                pass  # Integrations not available
+
+            # Otherwise, use built-in tools
             method = getattr(self, f"_tool_{tool_name}", None)
             if method is None:
                 return f"Error: Unknown tool '{tool_name}'"

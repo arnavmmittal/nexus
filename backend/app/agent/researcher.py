@@ -63,8 +63,8 @@ class ResearchResult:
 # Tool definitions for Claude
 RESEARCHER_TOOLS = [
     {
-        "name": "web_search",
-        "description": "Search the web using DuckDuckGo. Returns a list of search results with titles, URLs, and snippets. Use this to find information, articles, documentation, or any web content.",
+        "name": "search_web_ddg",
+        "description": "Search the web using DuckDuckGo (free, no API key). Returns a list of search results with titles, URLs, and snippets. Use this to find information, articles, documentation, or any web content.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -270,7 +270,7 @@ class ResearcherTools:
 
     # ============ WEB SEARCH ============
 
-    async def web_search(
+    async def search_web_ddg(
         self,
         query: str,
         max_results: int = 10,
@@ -585,7 +585,7 @@ Provide a clear, well-structured explanation. Use markdown formatting for clarit
                 search_query += " " + " ".join(focus_areas[:2])  # Add first 2 focus areas
 
             # Search for sources
-            search_result = await self.web_search(search_query, max_results=num_sources * 2)
+            search_result = await self.search_web_ddg(search_query, max_results=num_sources * 2)
 
             if not search_result.get("success"):
                 return ResearchResult(
@@ -832,7 +832,7 @@ Provide the summary in markdown format."""
                 if context:
                     search_query += f" {context}"
 
-                search_result = await self.web_search(search_query, max_results=3)
+                search_result = await self.search_web_ddg(search_query, max_results=3)
 
                 if search_result.get("success"):
                     results = search_result.get("data", {}).get("results", [])
