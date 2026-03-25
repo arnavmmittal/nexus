@@ -343,7 +343,7 @@ function OrbParticles({ state, audioLevel }: OrbMeshProps) {
     return new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uColor: { value: new THREE.Color(stateColors.idle.hex) },
+        uColor: { value: new THREE.Color(stateColors.idle.color) },
         uSecondaryColor: { value: new THREE.Color(stateColors.idle.glow) },
         uAudioLevel: { value: 0 },
         uState: { value: 0 },
@@ -440,7 +440,7 @@ function OrbParticles({ state, audioLevel }: OrbMeshProps) {
     materialRef.current.uniforms.uState.value += (stateNum - materialRef.current.uniforms.uState.value) * 0.1;
 
     // Color transition
-    const targetColor = new THREE.Color(stateColors[state].hex);
+    const targetColor = new THREE.Color(stateColors[state].color);
     const targetSecondary = new THREE.Color(stateColors[state].glow);
     materialRef.current.uniforms.uColor.value.lerp(targetColor, 0.05);
     materialRef.current.uniforms.uSecondaryColor.value.lerp(targetSecondary, 0.05);
