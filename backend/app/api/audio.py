@@ -76,7 +76,7 @@ class ZoneAnnounceRequest(BaseModel):
 # Announcement endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/audio/announce", response_model=AnnounceResponse)
+@router.post("/announce", response_model=AnnounceResponse)
 async def announce(data: AnnounceRequest):
     """Send a TTS announcement to specific rooms or all rooms."""
     mgr: AudioManager = get_audio_manager()
@@ -84,7 +84,7 @@ async def announce(data: AnnounceRequest):
     return AnnounceResponse(results=results)
 
 
-@router.post("/audio/tts", response_model=TTSResponse)
+@router.post("/tts", response_model=TTSResponse)
 async def play_tts(data: TTSRequest):
     """Play TTS on a specific room's speaker."""
     mgr: AudioManager = get_audio_manager()
@@ -99,7 +99,7 @@ async def play_tts(data: TTSRequest):
 # Room CRUD
 # ---------------------------------------------------------------------------
 
-@router.get("/audio/rooms", response_model=list[RoomResponse])
+@router.get("/rooms", response_model=list[RoomResponse])
 async def list_rooms():
     """List all registered rooms and their status."""
     mgr: AudioManager = get_audio_manager()
@@ -107,7 +107,7 @@ async def list_rooms():
     return rooms
 
 
-@router.post("/audio/rooms", response_model=RoomResponse, status_code=201)
+@router.post("/rooms", response_model=RoomResponse, status_code=201)
 async def register_room(data: RoomCreate):
     """Register a new room/speaker."""
     if data.type not in ("sonos", "chromecast", "local", "airplay"):
@@ -134,7 +134,7 @@ async def register_room(data: RoomCreate):
     )
 
 
-@router.delete("/audio/rooms/{room_id}", status_code=204)
+@router.delete("/rooms/{room_id}", status_code=204)
 async def remove_room(room_id: str):
     """Remove a registered room/speaker."""
     mgr: AudioManager = get_audio_manager()
@@ -143,7 +143,7 @@ async def remove_room(room_id: str):
         raise HTTPException(status_code=404, detail="Room not found")
 
 
-@router.put("/audio/rooms/{room_id}/volume", response_model=RoomResponse)
+@router.put("/rooms/{room_id}/volume", response_model=RoomResponse)
 async def set_volume(room_id: str, data: VolumeRequest):
     """Set volume for a specific room."""
     mgr: AudioManager = get_audio_manager()
@@ -165,7 +165,7 @@ async def set_volume(room_id: str, data: VolumeRequest):
 # Zone endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/audio/zones", response_model=ZoneResponse, status_code=201)
+@router.post("/zones", response_model=ZoneResponse, status_code=201)
 async def create_zone(data: ZoneCreate):
     """Create a zone grouping multiple rooms."""
     mgr: AudioManager = get_audio_manager()
@@ -173,7 +173,7 @@ async def create_zone(data: ZoneCreate):
     return ZoneResponse(zone_id=zone.zone_id, name=zone.name, rooms=zone.rooms)
 
 
-@router.get("/audio/zones", response_model=list[ZoneResponse])
+@router.get("/zones", response_model=list[ZoneResponse])
 async def list_zones():
     """List all audio zones."""
     mgr: AudioManager = get_audio_manager()
@@ -181,7 +181,7 @@ async def list_zones():
     return zones
 
 
-@router.post("/audio/zones/announce", response_model=AnnounceResponse)
+@router.post("/zones/announce", response_model=AnnounceResponse)
 async def announce_to_zone(data: ZoneAnnounceRequest):
     """Announce to all rooms in a zone."""
     mgr: AudioManager = get_audio_manager()

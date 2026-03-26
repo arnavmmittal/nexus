@@ -16,6 +16,7 @@ alembic>=1.13.1
 # Validation and settings
 pydantic>=2.5.3
 pydantic-settings>=2.1.0
+eval_type_backport>=0.2.0  # Python 3.9 compat for X | Y union syntax in Pydantic models
 python-dotenv>=1.0.0
 
 # AI
