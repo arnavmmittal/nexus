@@ -347,21 +347,31 @@ Mobile/Home Client
 - [x] Push notification system
 - [x] PWA icons and splash screens generated
 
-### Phase 2 (Week 1-2)
-- [ ] iOS app scaffolding
-- [ ] Wake word integration (Picovoice)
-- [ ] iOS widgets
-- [ ] Apple Watch app
-- [ ] Android app
-- [ ] Wear OS companion
+### Phase 2 (Week 1-2) ✅ iOS COMPLETE
+- [x] iOS app scaffolding (SwiftUI, @Observable)
+- [x] iOS widgets (WidgetKit - Quick Actions + Status)
+- [x] Apple Watch app (WatchConnectivity + direct API)
+- [x] Siri Intents (Ask Jarvis, Home Control, Remind Me)
+- [ ] Wake word integration (Picovoice) — deferred to Phase 4
+- [ ] Android app — deferred
+- [ ] Wear OS companion — deferred
 
-### Phase 3 (Week 2-4)
-- [ ] Family member profiles
-- [ ] Voice recognition per user
-- [ ] Kitchen terminal UI
-- [ ] Raspberry Pi setup scripts
-- [ ] Wake word service
-- [ ] Whole-home presence system
+### Phase 3 (Week 2-4) ✅ COMPLETE
+- [x] Family member profiles (FamilyManager + JSON persistence)
+- [x] Kitchen/home terminal UI (full-screen kiosk mode)
+- [x] Raspberry Pi setup scripts (Chromium kiosk + systemd)
+- [x] Whole-home presence system (auto-expiry, arrival/departure hooks)
+- [x] Family API endpoints (CRUD, greetings, presence)
+- [ ] Voice recognition per user — deferred to Phase 4
+- [ ] Wake word service — deferred to Phase 4
+
+### Phase 4 (Month 2+) ✅ COMPLETE
+- [x] Multi-room audio system (Sonos/Chromecast/AirPlay/local, zone grouping)
+- [x] Security camera integration (RTSP/Ring/Nest, Claude Vision analysis, motion detection)
+- [x] Vehicle integration (driving mode, commute briefings, "on my way home" automation)
+- [x] Custom hardware terminal (Pi 5 setup, LED ring controller, health monitor)
+- [x] Wake word service (Picovoice Porcupine, energy-based VAD, systemd)
+- [x] Voice recognition per family member (MFCC embeddings, cosine similarity)
 
 ---
 

@@ -27,6 +27,7 @@ class FamilyMember:
     allowed_actions: list[str] = field(default_factory=list)
     avatar_url: Optional[str] = None
     telegram_user_id: Optional[int] = None
+    voice_profile_ready: bool = False
 
 
 @dataclass
@@ -55,6 +56,7 @@ class FamilyMemberCreate(BaseModel):
     allowed_actions: list[str] = []
     avatar_url: Optional[str] = None
     telegram_user_id: Optional[int] = None
+    voice_profile_ready: bool = False
     greeting_preferences: dict = {
         "use_name": True,
         "time_aware": True,
@@ -72,6 +74,7 @@ class FamilyMemberUpdate(BaseModel):
     allowed_actions: Optional[list[str]] = None
     avatar_url: Optional[str] = None
     telegram_user_id: Optional[int] = None
+    voice_profile_ready: Optional[bool] = None
     greeting_preferences: Optional[dict] = None
     default_mode: Optional[str] = None
     voice_enabled: Optional[bool] = None
@@ -86,6 +89,7 @@ class FamilyMemberResponse(BaseModel):
     allowed_actions: list[str] = []
     avatar_url: Optional[str] = None
     telegram_user_id: Optional[int] = None
+    voice_profile_ready: bool = False
     greeting_preferences: dict = {}
     default_mode: str = "jarvis"
     voice_enabled: bool = True
@@ -144,6 +148,7 @@ class FamilyManager:
             allowed_actions=data.allowed_actions,
             avatar_url=data.avatar_url,
             telegram_user_id=data.telegram_user_id,
+            voice_profile_ready=data.voice_profile_ready,
         )
         profile = FamilyProfile(
             member=member,
@@ -176,6 +181,7 @@ class FamilyManager:
         for key in (
             "name", "voice_id", "preferences", "autonomy_level",
             "allowed_actions", "avatar_url", "telegram_user_id",
+            "voice_profile_ready",
         ):
             if key in updates:
                 setattr(member, key, updates[key])
@@ -210,6 +216,25 @@ class FamilyManager:
             if profile.member.telegram_user_id == telegram_id:
                 return profile
         return None
+
+    # -- voice identification -----------------------------------------------
+
+    async def identify_by_voice(
+        self, audio_data: bytes, sample_rate: int = 16000
+    ) -> tuple[FamilyProfile | None, float]:
+        """Identify a family member by their voice.
+
+        Returns (FamilyProfile | None, confidence).  Uses the VoiceIdentifier
+        service under the hood.
+        """
+        from app.home.voice_id import get_voice_identifier
+
+        vid = get_voice_identifier()
+        member_id, confidence = vid.identify(audio_data, sample_rate)
+        if member_id:
+            profile = self._profiles.get(member_id)
+            return profile, confidence
+        return None, confidence
 
     # -- greeting -----------------------------------------------------------
 

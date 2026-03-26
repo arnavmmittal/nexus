@@ -35,6 +35,7 @@ def _profile_to_response(profile) -> FamilyMemberResponse:
         allowed_actions=m.allowed_actions,
         avatar_url=m.avatar_url,
         telegram_user_id=m.telegram_user_id,
+        voice_profile_ready=m.voice_profile_ready,
         greeting_preferences=profile.greeting_preferences,
         default_mode=profile.default_mode,
         voice_enabled=profile.voice_enabled,

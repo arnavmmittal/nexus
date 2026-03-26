@@ -124,17 +124,17 @@ actor NexusAPI {
 
     // MARK: - Generic Helpers
 
-    private func get<T: Decodable>(path: String) async throws -> T {
+    func get<T: Decodable>(path: String) async throws -> T {
         let request = try buildRequest(path: path, method: "GET")
         return try await execute(request)
     }
 
-    private func post<B: Encodable, T: Decodable>(path: String, body: B) async throws -> T {
+    func post<B: Encodable, T: Decodable>(path: String, body: B) async throws -> T {
         let request = try buildRequest(path: path, method: "POST", body: body)
         return try await execute(request)
     }
 
-    private func execute<T: Decodable>(_ request: URLRequest) async throws -> T {
+    func execute<T: Decodable>(_ request: URLRequest) async throws -> T {
         let data: Data
         let response: URLResponse
         do {
@@ -154,7 +154,7 @@ actor NexusAPI {
 
     // MARK: - Request Building
 
-    private func buildRequest<B: Encodable>(
+    func buildRequest<B: Encodable>(
         path: String,
         method: String,
         body: B? = nil as String?,
@@ -185,7 +185,7 @@ actor NexusAPI {
     }
 
     /// Overload for requests with no body.
-    private func buildRequest(
+    func buildRequest(
         path: String,
         method: String,
         extraHeaders: [String: String] = [:]

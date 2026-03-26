@@ -1,0 +1,59 @@
+# Nexus Wake Word Detection Service - Configuration
+# Copy this file and adjust for your setup.
+
+# -- Nexus API connection --------------------------------------------------
+nexus:
+  api_url: "http://localhost:8000"
+  # API key for authenticating with the Nexus shortcut endpoint.
+  # Can also be set via NEXUS_API_KEY environment variable.
+  api_key: "YOUR_NEXUS_API_KEY_HERE"
+
+# Picovoice access key (free at https://console.picovoice.ai/)
+# Can also be set via PICOVOICE_ACCESS_KEY environment variable.
+picovoice_access_key: "YOUR_PICOVOICE_ACCESS_KEY_HERE"
+
+# -- Wake words -------------------------------------------------------------
+# Built-in Porcupine keywords: jarvis, computer, alexa, ok google, etc.
+# For custom wake words, provide a path to a .ppn file.
+wake_words:
+  - word: "jarvis"
+    sensitivity: 0.5
+  - word: "computer"
+    sensitivity: 0.5
+  # Custom wake word example (train at https://console.picovoice.ai/):
+  # - word: "/path/to/ultron_raspberry-pi.ppn"
+  #   sensitivity: 0.6
+
+# -- Audio settings ---------------------------------------------------------
+audio:
+  # Microphone device index. Use -1 for system default.
+  # Run `python wake_word_service.py --list-devices` to see available devices.
+  device_index: -1
+  sample_rate: 16000
+
+# -- Voice Activity Detection (energy-based) --------------------------------
+vad:
+  # RMS energy threshold for speech detection.
+  # Lower = more sensitive (picks up quieter speech but also more noise).
+  # Start at 500 and adjust: quiet room ~300, noisy room ~800.
+  energy_threshold: 500
+  # Seconds of silence after speech to stop recording.
+  silence_timeout: 1.5
+  # Maximum recording length in seconds (safety cap).
+  max_record_seconds: 15.0
+  # Milliseconds of audio to keep before speech onset.
+  pre_speech_buffer_ms: 300
+
+# -- LED indicator (Raspberry Pi GPIO) --------------------------------------
+led:
+  # BCM GPIO pin number for status LED. Set to null to disable.
+  # Wiring: GPIO pin -> 330 ohm resistor -> LED anode -> LED cathode -> GND
+  pin: null
+  # pin: 18  # Example: GPIO 18
+
+# -- Sound files -------------------------------------------------------------
+sounds:
+  directory: "./sounds"
+  ack: "ack.wav"       # Played when wake word detected
+  done: "done.wav"     # Played when Nexus responds successfully
+  error: "error.wav"   # Played on error

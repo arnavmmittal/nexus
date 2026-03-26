@@ -1,0 +1,19 @@
+# Nexus Wake Word Detection Service - Dependencies
+# Install: pip install -r requirements.txt
+
+# Core - wake word detection
+pvporcupine>=3.0.0
+pvrecorder>=1.2.0
+
+# HTTP client for Nexus API
+httpx>=0.25.0
+
+# Configuration
+pyyaml>=6.0
+
+# Optional: improved VAD (uncomment if needed)
+# webrtcvad>=2.0.10
+
+# Optional: Raspberry Pi GPIO for LED indicators
+# Uncomment on Raspberry Pi:
+# RPi.GPIO>=0.7.0
