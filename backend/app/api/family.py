@@ -66,7 +66,7 @@ class GreetingResponse(BaseModel):
 # Family CRUD
 # ---------------------------------------------------------------------------
 
-@router.get("/family", response_model=list[FamilyMemberResponse])
+@router.get("/", response_model=list[FamilyMemberResponse])
 async def list_family_members():
     """List all family members."""
     mgr: FamilyManager = get_family_manager()
@@ -74,7 +74,7 @@ async def list_family_members():
     return [_profile_to_response(p) for p in profiles]
 
 
-@router.post("/family", response_model=FamilyMemberResponse, status_code=201)
+@router.post("/", response_model=FamilyMemberResponse, status_code=201)
 async def add_family_member(data: FamilyMemberCreate):
     """Add a new family member."""
     mgr: FamilyManager = get_family_manager()
@@ -82,7 +82,7 @@ async def add_family_member(data: FamilyMemberCreate):
     return _profile_to_response(profile)
 
 
-@router.get("/family/{member_id}", response_model=FamilyMemberResponse)
+@router.get("/{member_id}", response_model=FamilyMemberResponse)
 async def get_family_member(member_id: str):
     """Get a family member by ID."""
     mgr: FamilyManager = get_family_manager()
@@ -92,7 +92,7 @@ async def get_family_member(member_id: str):
     return _profile_to_response(profile)
 
 
-@router.put("/family/{member_id}", response_model=FamilyMemberResponse)
+@router.put("/{member_id}", response_model=FamilyMemberResponse)
 async def update_family_member(member_id: str, data: FamilyMemberUpdate):
     """Update a family member."""
     mgr: FamilyManager = get_family_manager()
@@ -102,7 +102,7 @@ async def update_family_member(member_id: str, data: FamilyMemberUpdate):
     return _profile_to_response(profile)
 
 
-@router.delete("/family/{member_id}", status_code=204)
+@router.delete("/{member_id}", status_code=204)
 async def delete_family_member(member_id: str):
     """Remove a family member."""
     mgr: FamilyManager = get_family_manager()
@@ -115,7 +115,7 @@ async def delete_family_member(member_id: str):
 # Greeting
 # ---------------------------------------------------------------------------
 
-@router.get("/family/{member_id}/greeting", response_model=GreetingResponse)
+@router.get("/{member_id}/greeting", response_model=GreetingResponse)
 async def get_greeting(member_id: str):
     """Get a personalized time-based greeting for a family member."""
     mgr: FamilyManager = get_family_manager()
@@ -130,7 +130,7 @@ async def get_greeting(member_id: str):
 # Presence
 # ---------------------------------------------------------------------------
 
-@router.post("/family/{member_id}/presence", response_model=PresenceResponse)
+@router.post("/{member_id}/presence", response_model=PresenceResponse)
 async def update_member_presence(member_id: str, data: PresenceUpdate):
     """Update presence state for a family member."""
     # Verify member exists
