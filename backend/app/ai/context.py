@@ -203,24 +203,6 @@ class ContextAssembler:
 
         return "\n".join(state_parts)
 
-
-def _cleanup_context_cache():
-    """Remove expired cache entries."""
-    global _context_cache
-    now = datetime.now()
-    expired_keys = [
-        key for key, (timestamp, _) in _context_cache.items()
-        if (now - timestamp).total_seconds() > _CACHE_TTL_SECONDS * 2
-    ]
-    for key in expired_keys:
-        del _context_cache[key]
-    # Also limit cache size
-    if len(_context_cache) > 100:
-        # Remove oldest entries
-        sorted_keys = sorted(_context_cache.keys(), key=lambda k: _context_cache[k][0])
-        for key in sorted_keys[:50]:
-            del _context_cache[key]
-
     async def _get_user_identity(self, user_id: UUID) -> Optional[Dict]:
         """Get user identity information."""
         result = await self.db.execute(
@@ -320,3 +302,19 @@ def _cleanup_context_cache():
         except Exception:
             pass
         return ""
+
+
+def _cleanup_context_cache():
+    """Remove expired cache entries."""
+    global _context_cache
+    now = datetime.now()
+    expired_keys = [
+        key for key, (timestamp, _) in _context_cache.items()
+        if (now - timestamp).total_seconds() > _CACHE_TTL_SECONDS * 2
+    ]
+    for key in expired_keys:
+        del _context_cache[key]
+    if len(_context_cache) > 100:
+        sorted_keys = sorted(_context_cache.keys(), key=lambda k: _context_cache[k][0])
+        for key in sorted_keys[:50]:
+            del _context_cache[key]

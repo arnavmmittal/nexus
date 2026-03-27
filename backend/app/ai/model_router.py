@@ -46,7 +46,7 @@ class ModelConfig:
 AVAILABLE_MODELS: Dict[ModelTier, ModelConfig] = {
     ModelTier.FAST: ModelConfig(
         name="Claude 3 Haiku",
-        model_id="claude-3-haiku-20240307",
+        model_id="claude-haiku-4-5-20251001",
         tier=ModelTier.FAST,
         cost_per_1k_input=0.00025,
         cost_per_1k_output=0.00125,
@@ -61,7 +61,7 @@ AVAILABLE_MODELS: Dict[ModelTier, ModelConfig] = {
     ),
     ModelTier.BALANCED: ModelConfig(
         name="Claude 3.5 Sonnet",
-        model_id="claude-3-5-sonnet-20241022",
+        model_id="claude-sonnet-4-20250514",
         tier=ModelTier.BALANCED,
         cost_per_1k_input=0.003,
         cost_per_1k_output=0.015,
@@ -75,7 +75,7 @@ AVAILABLE_MODELS: Dict[ModelTier, ModelConfig] = {
     ),
     ModelTier.POWERFUL: ModelConfig(
         name="Claude 3 Opus",
-        model_id="claude-3-opus-20240229",
+        model_id="claude-opus-4-5-20251101",
         tier=ModelTier.POWERFUL,
         cost_per_1k_input=0.015,
         cost_per_1k_output=0.075,
@@ -383,7 +383,7 @@ def select_model_for_query(
         required_tools: Tools to be used
 
     Returns:
-        Model ID string (e.g., "claude-3-haiku-20240307")
+        Model ID string (e.g., "claude-haiku-4-5-20251001")
     """
     router = get_model_router()
     model, _ = router.select_model(query, conversation_history, required_tools)

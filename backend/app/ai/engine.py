@@ -129,7 +129,7 @@ class AIEngine:
     """
 
     # Default model (can be overridden by model router)
-    MODEL = "claude-3-haiku-20240307"
+    MODEL = "claude-haiku-4-5-20251001"
     MAX_TOKENS = 4096
 
     # Cost optimization settings
@@ -283,6 +283,13 @@ class AIEngine:
                 logger.debug(f"Added {len(mcp_tools)} MCP tools for agent {agent_name}")
             except Exception as e:
                 logger.warning(f"Failed to load MCP tools: {e}")
+
+        # Deduplicate tools by name (later definitions win)
+        seen = {}
+        for tool in all_tools:
+            name = tool.get("name", "")
+            seen[name] = tool
+        all_tools = list(seen.values())
 
         # Sanitize all tools to remove non-standard fields
         return [self._sanitize_tool(tool) for tool in all_tools]

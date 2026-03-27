@@ -30,7 +30,7 @@ class SummarizationConfig:
     preserve_tool_results: bool = True  # Keep tool call/result pairs intact
 
     # Model for summarization (use cheapest model)
-    summarization_model: str = "claude-3-haiku-20240307"
+    summarization_model: str = "claude-haiku-4-5-20251001"
     summarization_max_tokens: int = 500
 
 

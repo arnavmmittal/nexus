@@ -628,7 +628,7 @@ FACTS (JSON array):"""
 
         try:
             response = await self.client.messages.create(
-                model="claude-3-haiku-20240307",  # Use fast/cheap model
+                model="claude-haiku-4-5-20251001",  # Use fast/cheap model
                 max_tokens=1000,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -727,7 +727,7 @@ FACTS (JSON array):"""
 
         try:
             response = await self.client.messages.create(
-                model="claude-3-haiku-20240307",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=500,
                 messages=[{"role": "user", "content": prompt}],
             )

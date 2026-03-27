@@ -1796,7 +1796,7 @@ async def process_update(update: TelegramUpdate) -> None:
                 )
 
     except Exception as e:
-        logger.error(f"Error processing update: {e}")
+        logger.error(f"Error processing update: {e}", exc_info=True)
 
 
 @router.post("/setup")

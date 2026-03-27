@@ -168,7 +168,7 @@ class UsageRecord:
 AVAILABLE_MODELS: Dict[ModelTier, ModelConfig] = {
     ModelTier.FAST: ModelConfig(
         name="Claude 3.5 Haiku",
-        model_id="claude-3-5-haiku-20241022",
+        model_id="claude-haiku-4-5-20251001",
         tier=ModelTier.FAST,
         cost_per_1m_input=1.0,
         cost_per_1m_output=5.0,
